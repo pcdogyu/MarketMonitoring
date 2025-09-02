@@ -145,8 +145,16 @@ async def fetch_all(symbol: str) -> Dict[str, float]:
     }
 
 
-def append_history(symbol: str, data: Dict[str, Any], base: Path | None = None) -> None:
-    """Append ``data`` to a derivatives history file for ``symbol``."""
+def append_history(
+    symbol: str,
+    data: Dict[str, Any],
+    base: Path | None = None,
+    max_points: int | None = None,
+) -> None:
+    """Append ``data`` to a derivatives history file for ``symbol``.
+
+    ``max_points`` limits the stored history to the most recent entries.
+    """
 
     base = base or BASE_DIR / "data"
     path = base / f"derivs_{symbol}.json"
@@ -160,6 +168,10 @@ def append_history(symbol: str, data: Dict[str, Any], base: Path | None = None) 
     hist["basis"].append(data["basis"])
     hist["oi"].append(data["oi"])
     hist["timestamps"].append(data.get("time") or time.strftime("%H:%M", time.gmtime()))
+
+    if max_points:
+        for k in ("funding", "basis", "oi", "timestamps"):
+            hist[k] = hist[k][-max_points:]
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(hist))
