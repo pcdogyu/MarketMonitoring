@@ -25,6 +25,9 @@ from typing import Any, Dict, Tuple
 import httpx
 
 
+# Base directory to resolve data paths independent of CWD
+BASE_DIR = Path(__file__).resolve().parent
+
 async def _binance(symbol: str) -> Tuple[float, float, float]:
     """Return ``(funding, basis, oi)`` from Binance futures."""
 
@@ -145,7 +148,7 @@ async def fetch_all(symbol: str) -> Dict[str, float]:
 def append_history(symbol: str, data: Dict[str, Any], base: Path | None = None) -> None:
     """Append ``data`` to a derivatives history file for ``symbol``."""
 
-    base = base or Path("data")
+    base = base or BASE_DIR / "data"
     path = base / f"derivs_{symbol}.json"
 
     try:
