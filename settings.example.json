@@ -1,0 +1,32 @@
+{
+  "etherscan_api_key": "YOUR_ETHERSCAN_KEY",
+  "eth": {
+    "api_base": "https://api.etherscan.io/api",
+    "usdt_contract": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "usdc_contract": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+  },
+  "btc": {
+    "api_base": "https://blockstream.info/api"
+  },
+  "mm": [
+    {
+      "name": "Wintermute",
+      "eth": {
+        "hot": [
+          "0x..."
+        ],
+        "cold": [
+          "0x..."
+        ]
+      },
+      "btc": {
+        "hot": [
+          "bc1..."
+        ],
+        "cold": [
+          "bc1..."
+        ]
+      }
+    }
+  ]
+}

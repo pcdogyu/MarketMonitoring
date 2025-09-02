@@ -1,106 +1,160 @@
-
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
-from aggregate import aggregate_metrics
-from ex_dict import ExDict
-from ex_dict_ab import AbExDict
-from suggest import suggest_rules_from_labels
-from ch_query import CH
-import json
 
 app = FastAPI()
-GLOBAL_STATE = {"state": None}
 
-HTML = """
-<!doctype html><meta charset="utf-8">
-<title>MM Monitor v5p15</title>
-<style>
-body{font-family:ui-monospace,monospace;padding:16px}
-.card{border:1px solid #ddd;border-radius:12px;padding:12px;margin:12px 0}
-h1{margin:0 0 12px 0}
-code{background:#f6f8fa;padding:2px 6px;border-radius:6px}
-</style>
-<h1>做市商动向（v5p15, /ex-dict/suggest 规则建议器）</h1>
-<div id="root"></div>
-<script>
-async function load(){
-  const syms = await fetch('/symbols').then(r=>r.json());
-  const root = document.getElementById('root'); root.innerHTML = '';
-  root.innerHTML += `<div class="card"><h3>Symbols</h3><pre>${JSON.stringify(syms,null,2)}</pre></div>`;
+# demo data
+DEMO_SNAPSHOT = {
+    "time": "2025-09-02T12:00:00Z",
+    "totals": {"BTC": 123.45, "ETH": 4567.89, "USDT": 2000000, "USDC": 1500000}
 }
-setInterval(load, 6000); load();
+# 历史演示（用于折线图）
+DEMO_HISTORY = {
+    "time": [f"12:{str(i).zfill(2)}" for i in range(0,30,5)],
+    "BTC":  [120,121,122,123,124,125],
+    "ETH":  [4500,4520,4550,4560,4568,4570],
+    "USDT": [1990000,1995000,1998000,2000000,2003000,2005000],
+    "USDC": [1495000,1497000,1499000,1500000,1501000,1502000]
+}
+DEMO_DERIVS = {
+    "BTCUSDT": {
+        "funding": [0.01, 0.015, 0.02, 0.018, 0.022, 0.019],
+        "basis": [50, 70, 40, 55, 65, 60],
+        "oi": [1000, 1200, 900, 1100, 1300, 1250],
+        "timestamps": ["12:00","12:05","12:10","12:15","12:20","12:25"]
+    },
+    "ETHUSDT": {
+        "funding": [0.008, 0.011, 0.013, 0.012, 0.014, 0.013],
+        "basis": [12, 18, 9, 14, 16, 13],
+        "oi": [600, 720, 680, 700, 740, 735],
+        "timestamps": ["12:00","12:05","12:10","12:15","12:20","12:25"]
+    }
+}
+
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return """
+<!doctype html>
+<meta charset=\"utf-8\">
+<title>MarketMonitoring v4.9</title>
+<script src=\"https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js\"></script>
+<h1>做市商监控 v4.9</h1>
+<div style=\"display:flex;gap:8px;flex-wrap:wrap\">
+  <button onclick=\"showTab('holdings')\">持仓</button>
+  <button onclick=\"showTab('predict')\">预测</button>
+  <button onclick=\"showTab('derivs')\">衍生品</button>
+</div>
+
+<!-- Tab: 持仓 -->
+<div id=\"tab-holdings\">
+  <div id=\"holdings-bar\" style=\"width:800px;height:320px;border:1px solid #ccc;margin-top:10px\"></div>
+  <div id=\"holdings-line\" style=\"width:800px;height:320px;border:1px solid #ccc;margin-top:10px\"></div>
+</div>
+
+<!-- Tab: 预测 -->
+<div id=\"tab-predict\" style=\"display:none\">
+  <div id=\"predict-json\" style=\"margin-top:10px\"></div>
+</div>
+
+<!-- Tab: 衍生品 -->
+<div id=\"tab-derivs\" style=\"display:none\">
+  <div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:10px\">
+    <div>
+      <h3>BTCUSDT Funding/Basis/OI</h3>
+      <div id=\"derivs-btc\" style=\"width:100%;height:320px;border:1px solid #ccc\"></div>
+    </div>
+    <div>
+      <h3>ETHUSDT Funding/Basis/OI</h3>
+      <div id=\"derivs-eth\" style=\"width:100%;height:320px;border:1px solid #ccc\"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(tab){
+  document.getElementById('tab-holdings').style.display = (tab==='holdings')?'block':'none';
+  document.getElementById('tab-predict').style.display  = (tab==='predict')?'block':'none';
+  document.getElementById('tab-derivs').style.display   = (tab==='derivs')?'block':'none';
+}
+async function load(){
+  // holdings bar
+  let snap = await fetch('/mm/holdings').then(r=>r.json());
+  let bar = echarts.init(document.getElementById('holdings-bar'));
+  bar.setOption({
+    title:{text:'最近快照'},
+    xAxis:{type:'category',data:Object.keys(snap.totals)},
+    yAxis:{type:'value'},
+    series:[{data:Object.values(snap.totals),type:'bar'}]
+  });
+  // holdings line
+  let hist = await fetch('/chart/holdings').then(r=>r.json());
+  let line = echarts.init(document.getElementById('holdings-line'));
+  line.setOption({
+    tooltip:{trigger:'axis'},
+    legend:{data:['BTC','ETH','USDT','USDC']},
+    xAxis:{type:'category',data:hist.time},
+    yAxis:{type:'value'},
+    series:[
+      {name:'BTC', type:'line', data:hist.BTC},
+      {name:'ETH', type:'line', data:hist.ETH},
+      {name:'USDT', type:'line', data:hist.USDT},
+      {name:'USDC', type:'line', data:hist.USDC},
+    ]
+  });
+  // predict
+  let pred1 = await fetch('/predict/BTCUSDT').then(r=>r.json());
+  let pred2 = await fetch('/predict/ETHUSDT').then(r=>r.json());
+  document.getElementById('predict-json').innerHTML =
+    '<h3>预测信号</h3><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';
+  // derivs
+  let dbtc = await fetch('/chart/derivs?symbol=BTCUSDT').then(r=>r.json());
+  let deth = await fetch('/chart/derivs?symbol=ETHUSDT').then(r=>r.json());
+  let btcChart = echarts.init(document.getElementById('derivs-btc'));
+  btcChart.setOption({
+    tooltip:{trigger:'axis'},
+    legend:{data:['funding','basis','oi']},
+    xAxis:{type:'category',data:dbtc.timestamps},
+    yAxis:{type:'value'},
+    series:[
+      {name:'funding', type:'line', data:dbtc.funding},
+      {name:'basis',   type:'line', data:dbtc.basis},
+      {name:'oi',      type:'line', data:dbtc.oi}
+    ]
+  });
+  let ethChart = echarts.init(document.getElementById('derivs-eth'));
+  ethChart.setOption({
+    tooltip:{trigger:'axis'},
+    legend:{data:['funding','basis','oi']},
+    xAxis:{type:'category',data:deth.timestamps},
+    yAxis:{type:'value'},
+    series:[
+      {name:'funding', type:'line', data:deth.funding},
+      {name:'basis',   type:'line', data:deth.basis},
+      {name:'oi',      type:'line', data:deth.oi}
+    ]
+  });
+}
+setInterval(load, 5000);
+load();
 </script>
 """
 
-@app.get("/", response_class=HTMLResponse)
-def index(): return HTML
+@app.get("/mm/holdings")
+def mm_holdings():
+    return DEMO_SNAPSHOT
 
-@app.get("/symbols")
-def symbols():
-    st = GLOBAL_STATE["state"]
-    return sorted(set(k.split("::")[1] for k in st.orderbook.keys())) if st else []
+@app.get("/chart/holdings")
+def chart_holdings():
+    return DEMO_HISTORY
 
-@app.get("/aggregate/{symbol}")
-def aggregate(symbol: str):
-    st = GLOBAL_STATE["state"]
-    if not st: return JSONResponse({"error":"no state"}, status_code=503)
-    return aggregate_metrics(st, symbol, onchain_scale_usd=st.onchain_scale_usd, ex_weights=st.onchain_ex_weights)
+@app.get("/predict/{symbol}")
+def predict(symbol: str):
+    sym = symbol.upper()
+    # demo: ETH 略低，BTC 略高
+    score = 0.18 if sym == "BTCUSDT" else 0.07
+    sig = "bullish" if score>0 else "bearish" if score<0 else "neutral"
+    return {"symbol": sym, "score": score, "signal": sig}
 
-# ---- /ex-dict/suggest ----
-@app.post("/ex-dict/suggest")
-async def exdict_suggest(req: Request):
-    """
-    简单包含/前缀聚类的规则建议器
-    payload：
-    {
-      "source": "ch|stats|both",            # 默认 both
-      "ch": {"url":"http://localhost:8123","database":"default","table":"mm_ab_samples","user":"","password":""},
-      "since_seconds": 86400,               # CH 时间窗口
-      "limit": 2000,                         # CH 限制（优先 since_seconds，不传则用 limit）
-      "min_support": 3,
-      "max_rules": 20
-    }
-    返回：[{pattern, canon, support, examples[]}...]
-    """
-    try:
-        body = await req.json()
-        source = (body or {}).get("source", "both")
-        labels = []
-
-        if source in ("ch","both"):
-            ch_cfg = (body or {}).get("ch") or {}
-            url = ch_cfg.get("url")
-            if url:
-                db = ch_cfg.get("database","default"); tb = ch_cfg.get("table","mm_ab_samples")
-                ch = CH(url, ch_cfg.get("user",""), ch_cfg.get("password",""))
-                since = int((body or {}).get("since_seconds") or 0)
-                limit = int((body or {}).get("limit") or 1000)
-                if since > 0:
-                    sql = f"SELECT label FROM {db}.{tb} WHERE ts > now() - toIntervalSecond({since}) ORDER BY ts DESC"
-                else:
-                    sql = f"SELECT label FROM {db}.{tb} ORDER BY ts DESC LIMIT {limit}"
-                rows = ch.select_json_each_row(sql)
-                labels += [r.get("label","") for r in rows]
-
-        if source in ("stats","both"):
-            st = AbExDict.stats()
-            labels += st.get("A",{}).get("recent_unmatched",[]) or []
-            labels += st.get("B",{}).get("recent_unmatched",[]) or []
-
-        # 去重
-        seen = set(); uniq_labels = []
-        for s in labels:
-            if s and s not in seen:
-                uniq_labels.append(s); seen.add(s)
-
-        if not uniq_labels:
-            return {"rules": [], "msg": "no labels to suggest from (check source streams)"}
-
-        rules = suggest_rules_from_labels(
-            uniq_labels,
-            min_support=int((body or {}).get("min_support") or 3),
-            max_rules=int((body or {}).get("max_rules") or 20)
-        )
-        return {"rules": rules, "total_labels": len(uniq_labels)}
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+@app.get("/chart/derivs")
+def chart_derivs(symbol: str):
+    return DEMO_DERIVS.get(symbol.upper(), DEMO_DERIVS["BTCUSDT"])

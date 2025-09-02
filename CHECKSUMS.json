@@ -1,0 +1,9 @@
+{
+  "server.py": "f94bebadd23e5ad4f1d54091fbd8c8b5",
+  "aggregate.py": "13e4df28e95a5981392583c0eaf08c81",
+  "suggest.py": "7ce2b640522aaaa9812302ce2a0b1825",
+  "ch_query.py": "0419e26974375a14b18252e89f9842ed",
+  "requirements.txt": "700d042f1aee1acba326bce90db4bd79",
+  "README.md": "6340fe504d6274a5b61a3cfe394afa87",
+  "run_server.bat": "f0e21bfb80a8d3122f82bcaeaf772a3e"
+}
