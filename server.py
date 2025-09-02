@@ -130,7 +130,7 @@ def index() -> str:
         "  line.setOption({tooltip:{trigger:'axis'},legend:{data:['BTC','ETH','USDT','USDC']},xAxis:{type:'category',data:hist.time},yAxis:{type:'value'},series:[{name:'BTC',type:'line',data:hist.BTC},{name:'ETH',type:'line',data:hist.ETH},{name:'USDT',type:'line',data:hist.USDT},{name:'USDC',type:'line',data:hist.USDC}]});\n"
         "  let pred1 = await fetch('/predict/BTCUSDT').then(r=>r.json());\n"
         "  let pred2 = await fetch('/predict/ETHUSDT').then(r=>r.json());\n"
-        "  document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';\n"
+        "  document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><p style=\"color:#555;font-size:14px\">数据来源: data/holdings_history.json, 信号计算为 ΔBTC/ETH - 0.8·ΔUSDT - 0.4·ΔUSDC</p><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';\n"
         "  let dbtc = await fetch('/chart/derivs?symbol=BTCUSDT').then(r=>r.json());\n"
         "  let deth = await fetch('/chart/derivs?symbol=ETHUSDT').then(r=>r.json());\n"
         "  let btcChart = echarts.init(document.getElementById('derivs-btc'));\n"
@@ -180,11 +180,22 @@ def chart_holdings() -> Dict[str, Any]:
 
 @app.get("/predict/{symbol}")
 def predict(symbol: str) -> Dict[str, Any]:
-    """Return simple differential prediction score."""
+    """Return differential prediction score for ``symbol``.
+
+    The score is based on the change in the target asset minus a weighted
+    change in stable coins: ``delta_target - 0.8*delta_USDT - 0.4*delta_USDC``.
+    A positive score yields a ``bullish`` signal while a negative score is
+    ``bearish``.
+    """
 
     hist = _load_history(Path("data/holdings_history.json"))
     if len(hist) < 2:
-        return {"symbol": symbol.upper(), "score": 0.0, "signal": "neutral"}
+        return {
+            "symbol": symbol.upper(),
+            "score": 0.0,
+            "signal": "neutral",
+            "note": "insufficient history",
+        }
 
     last, prev = hist[-1], hist[-2]
     sym = symbol.upper()
@@ -196,7 +207,7 @@ def predict(symbol: str) -> Dict[str, Any]:
     score = d_target - 0.8 * d_usdt - 0.4 * d_usdc
 
     sig = "bullish" if score > 0 else "bearish" if score < 0 else "neutral"
-    return {"symbol": sym, "score": score, "signal": sig}
+    return {"symbol": sym, "score": score, "signal": sig, "source": "data/holdings_history.json"}
 
 
 @app.get("/chart/derivs")
