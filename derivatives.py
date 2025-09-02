@@ -161,6 +161,11 @@ def append_history(symbol: str, data: Dict[str, Any], base: Path | None = None) 
     hist["oi"].append(data["oi"])
     hist["timestamps"].append(data.get("time") or time.strftime("%H:%M", time.gmtime()))
 
+    # Keep only the last 12 hours assuming 5 minute intervals (~144 entries)
+    max_points = 12 * 60 // 5
+    for key in ("funding", "basis", "oi", "timestamps"):
+        hist[key] = hist[key][-max_points:]
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(hist))
 

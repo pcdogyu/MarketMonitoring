@@ -52,7 +52,15 @@ async def _refresh_once() -> Dict[str, Any]:
 
     snapshot = await refresh_holdings(str(_settings_path()))
     ts = snapshot["time"]
-    for sym in ("BTCUSDT", "ETHUSDT"):
+    symbols = (
+        "BTCUSDT",
+        "ETHUSDT",
+        "SOLUSDT",
+        "XLMUSDT",
+        "XRPUSDT",
+        "AAVEUSDT",
+    )
+    for sym in symbols:
         deriv = await fetch_derivs(sym)
         deriv["time"] = ts
         append_deriv_history(sym, deriv, BASE_DIR / "data")
@@ -98,14 +106,15 @@ def index() -> str:
         "<meta charset='utf-8'>\n"
         "<title>MarketMonitoring</title>\n"
         "<script src='https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js'></script>\n"
+        "<style>button.active{background-color:#ddd}</style>\n"
         "</head>\n"
         "<body>\n"
         "<h1>Market Monitoring</h1>\n"
         "<div style='display:flex;gap:8px;flex-wrap:wrap'>\n"
-        "  <button onclick=\"showTab('holdings')\">持仓</button>\n"
-        "  <button onclick=\"showTab('predict')\">预测</button>\n"
-        "  <button onclick=\"showTab('derivs')\">衍生品</button>\n"
-        "  <button onclick=\"showTab('orders')\">挂单</button>\n"
+        "  <button id='btn-holdings' onclick=\"showTab('holdings')\">持仓</button>\n"
+        "  <button id='btn-predict' onclick=\"showTab('predict')\">预测</button>\n"
+        "  <button id='btn-derivs' onclick=\"showTab('derivs')\">衍生品</button>\n"
+        "  <button id='btn-orders' onclick=\"showTab('orders')\">挂单</button>\n"
         "</div>\n"
         "<div id='tab-holdings'>\n"
         "  <div id='holdings-bar' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>\n"
@@ -118,6 +127,10 @@ def index() -> str:
         "  <div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:10px'>\n"
         "    <div><h3>BTCUSDT Funding/Basis/OI</h3><div id='derivs-btc' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
         "    <div><h3>ETHUSDT Funding/Basis/OI</h3><div id='derivs-eth' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
+        "    <div><h3>SOLUSDT Funding/Basis/OI</h3><div id='derivs-sol' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
+        "    <div><h3>XLMUSDT Funding/Basis/OI</h3><div id='derivs-xlm' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
+        "    <div><h3>XRPUSDT Funding/Basis/OI</h3><div id='derivs-xrp' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
+        "    <div><h3>AAVEUSDT Funding/Basis/OI</h3><div id='derivs-aave' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
         "  </div>\n"
         "</div>\n"
         "<div id='tab-orders' style='display:none'>\n"
@@ -128,10 +141,10 @@ def index() -> str:
         "</div>\n"
         "<script>\n"
         "function showTab(tab){\n"
-        "  document.getElementById('tab-holdings').style.display = (tab==='holdings')?'block':'none';\n"
-        "  document.getElementById('tab-predict').style.display  = (tab==='predict')?'block':'none';\n"
-        "  document.getElementById('tab-derivs').style.display   = (tab==='derivs')?'block':'none';\n"
-        "  document.getElementById('tab-orders').style.display   = (tab==='orders')?'block':'none';\n"
+        "  ['holdings','predict','derivs','orders'].forEach(t=>{\n"
+        "    document.getElementById('tab-'+t).style.display = (tab===t)?'block':'none';\n"
+        "    document.getElementById('btn-'+t).classList.toggle('active', tab===t);\n"
+        "  });\n"
         "}\n"
         "async function load(){\n"
         "  let snap = await fetch('/mm/holdings').then(r=>r.json());\n"
@@ -143,12 +156,12 @@ def index() -> str:
         "  let pred1 = await fetch('/predict/BTCUSDT').then(r=>r.json());\n"
         "  let pred2 = await fetch('/predict/ETHUSDT').then(r=>r.json());\n"
         "  document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';\n"
-        "  let dbtc = await fetch('/chart/derivs?symbol=BTCUSDT').then(r=>r.json());\n"
-        "  let deth = await fetch('/chart/derivs?symbol=ETHUSDT').then(r=>r.json());\n"
-        "  let btcChart = echarts.init(document.getElementById('derivs-btc'));\n"
-        "  btcChart.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:dbtc.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:dbtc.funding},{name:'basis',type:'line',data:dbtc.basis},{name:'oi',type:'line',data:dbtc.oi}]});\n"
-        "  let ethChart = echarts.init(document.getElementById('derivs-eth'));\n"
-        "  ethChart.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:deth.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:deth.funding},{name:'basis',type:'line',data:deth.basis},{name:'oi',type:'line',data:deth.oi}]});\n"
+        "  const derivSymbols=[['BTCUSDT','derivs-btc'],['ETHUSDT','derivs-eth'],['SOLUSDT','derivs-sol'],['XLMUSDT','derivs-xlm'],['XRPUSDT','derivs-xrp'],['AAVEUSDT','derivs-aave']];\n"
+        "  for(let [sym,id] of derivSymbols){\n"
+        "    let d=await fetch(`/chart/derivs?symbol=${sym}&hours=12`).then(r=>r.json());\n"
+        "    let c=echarts.init(document.getElementById(id));\n"
+        "    c.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:d.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:d.funding},{name:'basis',type:'line',data:d.basis},{name:'oi',type:'line',data:d.oi}]});\n"
+        "  }\n"
         "  let ob_btc = await fetch('/chart/orders?symbol=BTCUSDT').then(r=>r.json());\n"
         "  let ob_eth = await fetch('/chart/orders?symbol=ETHUSDT').then(r=>r.json());\n"
         "  let obBtcChart = echarts.init(document.getElementById('orders-btc'));\n"
@@ -156,7 +169,7 @@ def index() -> str:
         "  let obEthChart = echarts.init(document.getElementById('orders-eth'));\n"
         "  obEthChart.setOption({xAxis:{type:'category',data:['buy','sell']},yAxis:{type:'value'},series:[{data:[ob_eth.buy,ob_eth.sell],type:'bar'}]});\n"
         "}\n"
-        "setInterval(load,5000);\nload();\n</script>\n"
+        "setInterval(load,5000);\nload();\nshowTab('holdings');\n</script>\n"
         "</body>\n"
         "</html>"
     )
@@ -218,14 +231,24 @@ def predict(symbol: str) -> Dict[str, Any]:
 
 
 @app.get("/chart/derivs")
-def chart_derivs(symbol: str) -> Dict[str, Any]:
-    """Return derivatives history for ``symbol``."""
+def chart_derivs(symbol: str, hours: int | None = None) -> Dict[str, Any]:
+    """Return derivatives history for ``symbol``.
+
+    If ``hours`` is provided, only the most recent ``hours`` hours of data are
+    returned, assuming a 5 minute refresh interval.
+    """
 
     path = BASE_DIR / "data" / f"derivs_{symbol.upper()}.json"
     try:
-        return json.loads(path.read_text())
+        data = json.loads(path.read_text())
     except Exception:
-        return {"funding": [], "basis": [], "oi": [], "timestamps": []}
+        data = {"funding": [], "basis": [], "oi": [], "timestamps": []}
+
+    if hours:
+        limit = int(hours * 60 / 5)
+        for key in ("funding", "basis", "oi", "timestamps"):
+            data[key] = data[key][-limit:]
+    return data
 
 
 @app.get("/chart/orders")
