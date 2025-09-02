@@ -97,6 +97,7 @@ def index() -> str:
         "  <button onclick=\"showTab('holdings')\">持仓</button>\n"
         "  <button onclick=\"showTab('predict')\">预测</button>\n"
         "  <button onclick=\"showTab('derivs')\">衍生品</button>\n"
+        "  <button onclick=\"showTab('orders')\">挂单</button>\n"
         "</div>\n"
         "<div id='tab-holdings'>\n"
         "  <div id='holdings-bar' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>\n"
@@ -111,11 +112,18 @@ def index() -> str:
         "    <div><h3>ETHUSDT Funding/Basis/OI</h3><div id='derivs-eth' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
         "  </div>\n"
         "</div>\n"
+        "<div id='tab-orders' style='display:none'>\n"
+        "  <div style='display:flex;flex-direction:column;gap:10px;margin-top:10px'>\n"
+        "    <div><h3>BTCUSDT Bids/Asks</h3><div id='orders-btc' style='width:800px;height:200px;border:1px solid #ccc'></div></div>\n"
+        "    <div><h3>ETHUSDT Bids/Asks</h3><div id='orders-eth' style='width:800px;height:200px;border:1px solid #ccc'></div></div>\n"
+        "  </div>\n"
+        "</div>\n"
         "<script>\n"
         "function showTab(tab){\n"
         "  document.getElementById('tab-holdings').style.display = (tab==='holdings')?'block':'none';\n"
         "  document.getElementById('tab-predict').style.display  = (tab==='predict')?'block':'none';\n"
         "  document.getElementById('tab-derivs').style.display   = (tab==='derivs')?'block':'none';\n"
+        "  document.getElementById('tab-orders').style.display   = (tab==='orders')?'block':'none';\n"
         "}\n"
         "async function load(){\n"
         "  let snap = await fetch('/mm/holdings').then(r=>r.json());\n"
@@ -133,6 +141,12 @@ def index() -> str:
         "  btcChart.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:dbtc.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:dbtc.funding},{name:'basis',type:'line',data:dbtc.basis},{name:'oi',type:'line',data:dbtc.oi}]});\n"
         "  let ethChart = echarts.init(document.getElementById('derivs-eth'));\n"
         "  ethChart.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:deth.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:deth.funding},{name:'basis',type:'line',data:deth.basis},{name:'oi',type:'line',data:deth.oi}]});\n"
+        "  let ob_btc = await fetch('/chart/orders?symbol=BTCUSDT').then(r=>r.json());\n"
+        "  let ob_eth = await fetch('/chart/orders?symbol=ETHUSDT').then(r=>r.json());\n"
+        "  let obBtcChart = echarts.init(document.getElementById('orders-btc'));\n"
+        "  obBtcChart.setOption({xAxis:{type:'category',data:['buy','sell']},yAxis:{type:'value'},series:[{data:[ob_btc.buy,ob_btc.sell],type:'bar'}]});\n"
+        "  let obEthChart = echarts.init(document.getElementById('orders-eth'));\n"
+        "  obEthChart.setOption({xAxis:{type:'category',data:['buy','sell']},yAxis:{type:'value'},series:[{data:[ob_eth.buy,ob_eth.sell],type:'bar'}]});\n"
         "}\n"
         "setInterval(load,5000);\nload();\n</script>"
     )
@@ -202,6 +216,15 @@ def chart_derivs(symbol: str) -> Dict[str, Any]:
         return json.loads(path.read_text())
     except Exception:
         return {"funding": [], "basis": [], "oi": [], "timestamps": []}
+
+
+@app.get("/chart/orders")
+async def chart_orders(symbol: str) -> Dict[str, float]:
+    """Return aggregated open buy/sell volumes for ``symbol``."""
+
+    from orderbook import fetch
+
+    return await fetch(symbol.upper())
 
 
 @app.post("/labels/import")

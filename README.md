@@ -11,6 +11,7 @@
   - Tab1: 最近持仓快照柱状图 + 历史折线
   - Tab2: 预测信号 (BTCUSDT, ETHUSDT)
   - Tab3: 衍生品 Funding / Basis / OI 曲线（**BTCUSDT & ETHUSDT 并排展示**）
+  - Tab4: 三大交易所挂单统计（BTCUSDT & ETHUSDT）
 
 ## 使用方法
 ```bash
