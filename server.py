@@ -52,10 +52,14 @@ async def _refresh_once() -> Dict[str, Any]:
 
     snapshot = await refresh_holdings(str(_settings_path()))
     ts = snapshot["time"]
-    for sym in ("BTCUSDT", "ETHUSDT"):
+    cfg = json.loads(_settings_path().read_text())
+    interval = int(cfg.get("refresh_interval_sec", 300))
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XLMUSDT", "XRPUSDT", "AAVEUSDT"]
+    max_points = int(12 * 3600 / interval)
+    for sym in symbols:
         deriv = await fetch_derivs(sym)
         deriv["time"] = ts
-        append_deriv_history(sym, deriv, BASE_DIR / "data")
+        append_deriv_history(sym, deriv, BASE_DIR / "data", max_points=max_points)
     return snapshot
 
 
@@ -98,14 +102,15 @@ def index() -> str:
         "<meta charset='utf-8'>\n"
         "<title>MarketMonitoring</title>\n"
         "<script src='https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js'></script>\n"
+        "<style>.menu{padding:4px 8px;border:1px solid #ccc;background:#fff;cursor:pointer;} .menu.active{background:#1890ff;color:#fff;}</style>\n"
         "</head>\n"
         "<body>\n"
         "<h1>Market Monitoring</h1>\n"
         "<div style='display:flex;gap:8px;flex-wrap:wrap'>\n"
-        "  <button onclick=\"showTab('holdings')\">持仓</button>\n"
-        "  <button onclick=\"showTab('predict')\">预测</button>\n"
-        "  <button onclick=\"showTab('derivs')\">衍生品</button>\n"
-        "  <button onclick=\"showTab('orders')\">挂单</button>\n"
+        "  <button class='menu active' onclick=\"showTab('holdings',this)\">持仓</button>\n"
+        "  <button class='menu' onclick=\"showTab('predict',this)\">预测</button>\n"
+        "  <button class='menu' onclick=\"showTab('derivs',this)\">衍生品</button>\n"
+        "  <button class='menu' onclick=\"showTab('orders',this)\">挂单</button>\n"
         "</div>\n"
         "<div id='tab-holdings'>\n"
         "  <div id='holdings-bar' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>\n"
@@ -115,10 +120,7 @@ def index() -> str:
         "  <div id='predict-json' style='margin-top:10px'></div>\n"
         "</div>\n"
         "<div id='tab-derivs' style='display:none'>\n"
-        "  <div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:10px'>\n"
-        "    <div><h3>BTCUSDT Funding/Basis/OI</h3><div id='derivs-btc' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
-        "    <div><h3>ETHUSDT Funding/Basis/OI</h3><div id='derivs-eth' style='width:100%;height:320px;border:1px solid #ccc'></div></div>\n"
-        "  </div>\n"
+        "  <div id='derivs-wrap' style='display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:10px'></div>\n"
         "</div>\n"
         "<div id='tab-orders' style='display:none'>\n"
         "  <div style='display:flex;flex-direction:column;gap:10px;margin-top:10px'>\n"
@@ -127,11 +129,14 @@ def index() -> str:
         "  </div>\n"
         "</div>\n"
         "<script>\n"
-        "function showTab(tab){\n"
+        "const derivSyms=['BTCUSDT','ETHUSDT','SOLUSDT','XLMUSDT','XRPUSDT','AAVEUSDT'];\n"
+        "function showTab(tab,btn){\n"
         "  document.getElementById('tab-holdings').style.display = (tab==='holdings')?'block':'none';\n"
         "  document.getElementById('tab-predict').style.display  = (tab==='predict')?'block':'none';\n"
         "  document.getElementById('tab-derivs').style.display   = (tab==='derivs')?'block':'none';\n"
         "  document.getElementById('tab-orders').style.display   = (tab==='orders')?'block':'none';\n"
+        "  document.querySelectorAll('.menu').forEach(b=>b.classList.remove('active'));\n"
+        "  if(btn) btn.classList.add('active');\n"
         "}\n"
         "async function load(){\n"
         "  let snap = await fetch('/mm/holdings').then(r=>r.json());\n"
@@ -143,12 +148,9 @@ def index() -> str:
         "  let pred1 = await fetch('/predict/BTCUSDT').then(r=>r.json());\n"
         "  let pred2 = await fetch('/predict/ETHUSDT').then(r=>r.json());\n"
         "  document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><p style=\"color:#555;font-size:14px\">数据来源: data/holdings_history.json, 信号计算为 ΔBTC/ETH - 0.8·ΔUSDT - 0.4·ΔUSDC</p><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';\n"
-        "  let dbtc = await fetch('/chart/derivs?symbol=BTCUSDT').then(r=>r.json());\n"
-        "  let deth = await fetch('/chart/derivs?symbol=ETHUSDT').then(r=>r.json());\n"
-        "  let btcChart = echarts.init(document.getElementById('derivs-btc'));\n"
-        "  btcChart.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:dbtc.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:dbtc.funding},{name:'basis',type:'line',data:dbtc.basis},{name:'oi',type:'line',data:dbtc.oi}]});\n"
-        "  let ethChart = echarts.init(document.getElementById('derivs-eth'));\n"
-        "  ethChart.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:deth.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:deth.funding},{name:'basis',type:'line',data:deth.basis},{name:'oi',type:'line',data:deth.oi}]});\n"
+        "  let wrap=document.getElementById('derivs-wrap');\n"
+        "  if(!wrap.hasChildNodes()){derivSyms.forEach(s=>{let d=document.createElement('div');d.innerHTML=`<h3>${s} Funding/Basis/OI</h3><div id=\"derivs-${s.toLowerCase()}\" style=\"width:100%;height:320px;border:1px solid #ccc\"></div>`;wrap.appendChild(d);});}\n"
+        "  for(let s of derivSyms){let d=await fetch(`/chart/derivs?symbol=${s}`).then(r=>r.json());let c=echarts.init(document.getElementById(`derivs-${s.toLowerCase()}`));c.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:d.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:d.funding},{name:'basis',type:'line',data:d.basis},{name:'oi',type:'line',data:d.oi}]});}\n"
         "  let ob_btc = await fetch('/chart/orders?symbol=BTCUSDT').then(r=>r.json());\n"
         "  let ob_eth = await fetch('/chart/orders?symbol=ETHUSDT').then(r=>r.json());\n"
         "  let obBtcChart = echarts.init(document.getElementById('orders-btc'));\n"
