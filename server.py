@@ -240,8 +240,16 @@ def chart_derivs(symbol: str) -> Dict[str, Any]:
 
 
 @app.get("/chart/orders")
-async def chart_orders(symbol: str) -> Dict[str, float]:
-    """Return aggregated open buy/sell volumes for ``symbol``."""
+async def chart_orders(symbol: str) -> Dict[str, Any]:
+    """Return aggregated open buy/sell volumes for ``symbol``.
+
+    The returned payload includes the ``symbol`` itself along with ``buy`` and
+    ``sell`` volume totals.  The previous type hint of ``Dict[str, float]``
+    implied that *all* values would be floats which caused Pydantic's response
+    validation to fail because ``symbol`` is a string.  Using ``Dict[str, Any]``
+    accurately reflects the response shape and prevents a runtime validation
+    error.
+    """
 
     from orderbook import fetch
 
