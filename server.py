@@ -25,14 +25,18 @@ from holdings import refresh_holdings
 app = FastAPI()
 
 
+# Base directory of the project – ensures paths work regardless of CWD
+BASE_DIR = Path(__file__).resolve().parent
+
+
 # ---------------------------------------------------------------------------
 # Utility helpers
 
 
 def _settings_path() -> Path:
-    p = Path("settings.json")
+    p = BASE_DIR / "settings.json"
     if not p.exists():
-        p = Path("settings.example.json")
+        p = BASE_DIR / "settings.example.json"
     return p
 
 
@@ -51,7 +55,7 @@ async def _refresh_once() -> Dict[str, Any]:
     for sym in ("BTCUSDT", "ETHUSDT"):
         deriv = await fetch_derivs(sym)
         deriv["time"] = ts
-        append_deriv_history(sym, deriv)
+        append_deriv_history(sym, deriv, BASE_DIR / "data")
     return snapshot
 
 
@@ -73,7 +77,7 @@ async def _refresh_loop() -> None:
 @app.on_event("startup")
 async def _startup() -> None:
     global LAST_SNAPSHOT
-    history = _load_history(Path("data/holdings_history.json"))
+    history = _load_history(BASE_DIR / "data" / "holdings_history.json")
     if history:
         LAST_SNAPSHOT = history[-1]
     asyncio.create_task(_refresh_loop())
@@ -182,7 +186,7 @@ def mm_holdings() -> Dict[str, Any]:
 def chart_holdings() -> Dict[str, Any]:
     """Return holdings history as time series."""
 
-    hist = _load_history(Path("data/holdings_history.json"))
+    hist = _load_history(BASE_DIR / "data" / "holdings_history.json")
     return {
         "time": [h["time"] for h in hist],
         "BTC": [h["totals"].get("BTC", 0) for h in hist],
@@ -196,7 +200,7 @@ def chart_holdings() -> Dict[str, Any]:
 def predict(symbol: str) -> Dict[str, Any]:
     """Return simple differential prediction score."""
 
-    hist = _load_history(Path("data/holdings_history.json"))
+    hist = _load_history(BASE_DIR / "data" / "holdings_history.json")
     if len(hist) < 2:
         return {"symbol": symbol.upper(), "score": 0.0, "signal": "neutral"}
 
@@ -217,7 +221,7 @@ def predict(symbol: str) -> Dict[str, Any]:
 def chart_derivs(symbol: str) -> Dict[str, Any]:
     """Return derivatives history for ``symbol``."""
 
-    path = Path(f"data/derivs_{symbol.upper()}.json")
+    path = BASE_DIR / "data" / f"derivs_{symbol.upper()}.json"
     try:
         return json.loads(path.read_text())
     except Exception:

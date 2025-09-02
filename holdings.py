@@ -27,6 +27,10 @@ import httpx
 ETH_DECIMALS = 10**18
 TOKEN_DECIMALS = 10**6  # USDT/USDC on Ethereum use 6 decimals
 
+# Base directory of the project to allow running from any working directory
+BASE_DIR = Path(__file__).resolve().parent
+HISTORY_PATH = BASE_DIR / "data" / "holdings_history.json"
+
 
 async def _eth_balance(client: httpx.AsyncClient, api_base: str, api_key: str, address: str) -> float:
     """Return ETH balance for ``address`` in whole ETH."""
@@ -166,7 +170,7 @@ async def refresh_holdings(settings_path: str = "settings.json") -> Dict[str, An
 
     cfg_path = Path(settings_path)
     if not cfg_path.exists():
-        cfg_path = Path("settings.example.json")
+        cfg_path = BASE_DIR / "settings.example.json"
 
     settings = json.loads(cfg_path.read_text())
 
@@ -177,7 +181,7 @@ async def refresh_holdings(settings_path: str = "settings.json") -> Dict[str, An
         "totals": totals,
     }
 
-    _append_history(snapshot, Path("data/holdings_history.json"))
+    _append_history(snapshot, HISTORY_PATH)
 
     return snapshot
 
