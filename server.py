@@ -89,9 +89,13 @@ def index() -> str:
 
     return (
         "<!doctype html>\n"
+        "<html>\n"
+        "<head>\n"
         "<meta charset='utf-8'>\n"
         "<title>MarketMonitoring</title>\n"
         "<script src='https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js'></script>\n"
+        "</head>\n"
+        "<body>\n"
         "<h1>Market Monitoring</h1>\n"
         "<div style='display:flex;gap:8px;flex-wrap:wrap'>\n"
         "  <button onclick=\"showTab('holdings')\">持仓</button>\n"
@@ -134,7 +138,9 @@ def index() -> str:
         "  let ethChart = echarts.init(document.getElementById('derivs-eth'));\n"
         "  ethChart.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:deth.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:deth.funding},{name:'basis',type:'line',data:deth.basis},{name:'oi',type:'line',data:deth.oi}]});\n"
         "}\n"
-        "setInterval(load,5000);\nload();\n</script>"
+        "setInterval(load,5000);\nload();\n</script>\n"
+        "</body>\n"
+        "</html>"
     )
 
 
