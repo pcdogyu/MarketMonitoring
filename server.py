@@ -20,6 +20,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from derivatives import append_history as append_deriv_history
 from derivatives import fetch_all as fetch_derivs
+from derivatives import backfill_24h as derivs_backfill
+from db import init_db, save_derivs as db_save_derivs, save_holdings as db_save_holdings, query_derivs as db_query_derivs
 from holdings import refresh_holdings
 
 app = FastAPI()
@@ -52,6 +54,11 @@ async def _refresh_once() -> Dict[str, Any]:
 
     snapshot = await refresh_holdings(str(_settings_path()))
     ts = snapshot["time"]
+    # persist snapshot to DB as well
+    try:
+        db_save_holdings(snapshot)
+    except Exception:
+        pass
     cfg = json.loads(_settings_path().read_text())
     interval = int(cfg.get("refresh_interval_sec", 300))
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XLMUSDT", "XRPUSDT", "AAVEUSDT"]
@@ -59,6 +66,11 @@ async def _refresh_once() -> Dict[str, Any]:
     for sym in symbols:
         deriv = await fetch_derivs(sym)
         deriv["time"] = ts
+        # write to DB and JSON history for backward compatibility
+        try:
+            db_save_derivs(sym, deriv)
+        except Exception:
+            pass
         append_deriv_history(sym, deriv, BASE_DIR / "data", max_points=max_points)
     return snapshot
 
@@ -81,10 +93,48 @@ async def _refresh_loop() -> None:
 @app.on_event("startup")
 async def _startup() -> None:
     global LAST_SNAPSHOT
+    # ensure local SQLite exists
+    try:
+        init_db()
+    except Exception:
+        pass
     history = _load_history(BASE_DIR / "data" / "holdings_history.json")
     if history:
         LAST_SNAPSHOT = history[-1]
     asyncio.create_task(_refresh_loop())
+    # Kick off a one-time backfill for derivatives if history is empty
+    asyncio.create_task(_maybe_backfill_24h())
+
+
+async def _maybe_backfill_24h() -> None:
+    """Backfill last 24h derivatives data if local store is empty.
+
+    Uses Binance endpoints via derivatives.backfill_24h. Runs once at startup.
+    """
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XLMUSDT", "XRPUSDT", "AAVEUSDT"]
+    for s in symbols:
+        path = BASE_DIR / "data" / f"derivs_{s}.json"
+        needs = True
+        try:
+            data = json.loads(path.read_text())
+            if data.get("timestamps"):
+                needs = False
+        except Exception:
+            needs = True
+        if not needs:
+            continue
+        try:
+            series = await derivs_backfill(s)
+            for t, f, b, o in zip(series["timestamps"], series["funding"], series["basis"], series["oi"]):
+                payload = {"funding": f, "basis": b, "oi": o, "time": t}
+                try:
+                    db_save_derivs(s, payload)
+                except Exception:
+                    pass
+                append_deriv_history(s, {**payload, "symbol": s}, BASE_DIR / "data")
+        except Exception:
+            # ignore backfill errors; regular refresh will still populate gradually
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +170,8 @@ def index() -> str:
         "  <div id='predict-json' style='margin-top:10px'></div>\n"
         "</div>\n"
         "<div id='tab-derivs' style='display:none'>\n"
-        "  <div id='derivs-wrap' style='display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:10px'></div>\n"
+        "  <div style='margin:10px 0;color:#555;font-size:13px'>时间已转换为中国时区 (UTC+8)</div>\n"
+        "  <div id='derivs-wrap' style='display:grid;grid-template-columns:140px 1fr 1fr 1fr;gap:10px;align-items:start'></div>\n"
         "</div>\n"
         "<div id='tab-orders' style='display:none'>\n"
         "  <div style='display:flex;flex-direction:column;gap:10px;margin-top:10px'>\n"
@@ -148,9 +199,36 @@ def index() -> str:
         "  let pred1 = await fetch('/predict/BTCUSDT').then(r=>r.json());\n"
         "  let pred2 = await fetch('/predict/ETHUSDT').then(r=>r.json());\n"
         "  document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><p style=\"color:#555;font-size:14px\">数据来源: data/holdings_history.json, 信号计算为 ΔBTC/ETH - 0.8·ΔUSDT - 0.4·ΔUSDC</p><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';\n"
+        "  const toCN = (arr)=>{return (arr||[]).map(t=>{try{let d=new Date(t);if(!isNaN(d)){d=new Date(d.getTime()+8*3600*1000);let m=(d.getUTCMonth()+1).toString().padStart(2,'0');let day=d.getUTCDate().toString().padStart(2,'0');let hh=d.getUTCHours().toString().padStart(2,'0');let mm=d.getUTCMinutes().toString().padStart(2,'0');return `${m}-${day} ${hh}:${mm}`;} }catch(e){} return t;});};\n"
         "  let wrap=document.getElementById('derivs-wrap');\n"
-        "  if(!wrap.hasChildNodes()){derivSyms.forEach(s=>{let d=document.createElement('div');d.innerHTML=`<h3>${s} Funding/Basis/OI</h3><div id=\"derivs-${s.toLowerCase()}\" style=\"width:100%;height:320px;border:1px solid #ccc\"></div>`;wrap.appendChild(d);});}\n"
-        "  for(let s of derivSyms){let d=await fetch(`/chart/derivs?symbol=${s}`).then(r=>r.json());let c=echarts.init(document.getElementById(`derivs-${s.toLowerCase()}`));c.setOption({tooltip:{trigger:'axis'},legend:{data:['funding','basis','oi']},xAxis:{type:'category',data:d.timestamps},yAxis:{type:'value'},series:[{name:'funding',type:'line',data:d.funding},{name:'basis',type:'line',data:d.basis},{name:'oi',type:'line',data:d.oi}]});}\n"
+        "  if(!wrap.hasChildNodes()){\n"
+        "    // header row\n"
+        "    ['Symbol','Funding','Basis','OI'].forEach((h,i)=>{let el=document.createElement('div');el.style.fontWeight='bold';el.style.margin='6px 0';el.textContent=h;wrap.appendChild(el);});\n"
+        "    // rows per symbol\n"
+        "    derivSyms.forEach(s=>{\n"
+        "      let label=document.createElement('div');label.style.fontWeight='bold';label.style.marginTop='10px';label.textContent=s;wrap.appendChild(label);\n"
+        "      ['funding','basis','oi'].forEach(kind=>{let box=document.createElement('div');box.id=`derivs-${s.toLowerCase()}-${kind}`;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});\n"
+        "    });\n"
+        "  }\n"
+        "  for(let s of derivSyms){\n"
+        "    let d=await fetch(`/chart/derivs?symbol=${s}`).then(r=>r.json());\n"
+        "    let x=toCN(d.timestamps);\n"
+        "    let f=(d.funding||[]).map(v=>Number(v)*100);\n"
+        "    let b=(d.basis||[]).map(v=>Number(v));\n"
+        "    let o=(d.oi||[]).map(v=>Number(v));\n"
+        "    let mk=(id,name,data,axisFmt,color)=>{\n"
+        "      let c=echarts.init(document.getElementById(id));\n"
+        "      c.setOption({\n"
+        "        tooltip:{trigger:'axis',formatter:(ps)=>{let p=ps[0];return p.axisValueLabel+'<br/>'+name+': '+axisFmt(p.data);}},\n"
+        "        xAxis:{type:'category',data:x},\n"
+        "        yAxis:{type:'value',name:name,axisLabel:{formatter:(val)=>axisFmt(val)}},\n"
+        "        series:[{name,showSymbol:false,type:'line',data,lineStyle:{color},itemStyle:{color}}]\n"
+        "      });\n"
+        "    };\n"
+        "    mk(`derivs-${s.toLowerCase()}-funding`,'Funding (%)',f,(v)=>Number(v).toFixed(2)+'%', '#5470C6');\n"
+        "    mk(`derivs-${s.toLowerCase()}-basis`,'Basis (USD)',b,(v)=>'$'+Number(v).toFixed(2), '#EE6666');\n"
+        "    mk(`derivs-${s.toLowerCase()}-oi`,'Open Interest',o,(v)=>Number(v).toLocaleString(), '#91CC75');\n"
+        "  }\n"
         "  let ob_btc = await fetch('/chart/orders?symbol=BTCUSDT').then(r=>r.json());\n"
         "  let ob_eth = await fetch('/chart/orders?symbol=ETHUSDT').then(r=>r.json());\n"
         "  let obBtcChart = echarts.init(document.getElementById('orders-btc'));\n"
@@ -231,14 +309,97 @@ def predict(symbol: str) -> Dict[str, Any]:
 
 
 @app.get("/chart/derivs")
-def chart_derivs(symbol: str) -> Dict[str, Any]:
-    """Return derivatives history for ``symbol``."""
+def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
+    """Return derivatives history for ``symbol``.
 
+    Optional query ``window`` restricts the time range (e.g. "5m", "1h").
+    The server prefers SQLite when available, falling back to JSON history.
+    """
+
+    def _parse_window(w: str | None) -> int | None:
+        if not w:
+            return None
+        try:
+            unit = w[-1].lower()
+            num = int(w[:-1])
+            if unit == "m":
+                return num * 60
+            if unit == "h":
+                return num * 3600
+            if unit == "d":
+                return num * 86400
+        except Exception:
+            return None
+        return None
+
+    secs = _parse_window(window)
+
+    # Try DB first
+    try:
+        data = db_query_derivs(symbol.upper(), secs)
+        if data["timestamps"]:
+            return data
+    except Exception:
+        pass
+
+    # Fallback to JSON file
     path = BASE_DIR / "data" / f"derivs_{symbol.upper()}.json"
     try:
-        return json.loads(path.read_text())
+        data = json.loads(path.read_text())
+        if secs is None:
+            return data
+        # cut by seconds based on timestamps
+        import time
+
+        cutoff = time.time() - secs
+        xs = []
+        for t in data.get("timestamps", []):
+            try:
+                ts = time.strptime(t, "%Y-%m-%dT%H:%M:%SZ")
+                if time.mktime(ts) >= cutoff:
+                    xs.append(True)
+                else:
+                    xs.append(False)
+            except Exception:
+                xs.append(True)
+        # filter arrays by xs mask
+        def filt(arr):
+            return [v for v, keep in zip(arr, xs) if keep]
+
+        return {
+            "funding": filt(data.get("funding", [])),
+            "basis": filt(data.get("basis", [])),
+            "oi": filt(data.get("oi", [])),
+            "timestamps": [t for t, keep in zip(data.get("timestamps", []), xs) if keep],
+        }
     except Exception:
         return {"funding": [], "basis": [], "oi": [], "timestamps": []}
+
+
+@app.post("/backfill/derivs")
+async def backfill_derivs() -> Dict[str, Any]:
+    """Force a 24h backfill for all symbols.
+
+    Returns a map of symbol->inserted points.
+    """
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XLMUSDT", "XRPUSDT", "AAVEUSDT"]
+    results: Dict[str, int] = {}
+    for s in symbols:
+        try:
+            series = await derivs_backfill(s)
+            n = 0
+            for t, f, b, o in zip(series["timestamps"], series["funding"], series["basis"], series["oi"]):
+                payload = {"funding": f, "basis": b, "oi": o, "time": t}
+                try:
+                    db_save_derivs(s, payload)
+                except Exception:
+                    pass
+                append_deriv_history(s, {**payload, "symbol": s}, BASE_DIR / "data")
+                n += 1
+            results[s] = n
+        except Exception:
+            results[s] = 0
+    return {"status": "ok", "inserted_points": results}
 
 
 @app.get("/chart/orders")

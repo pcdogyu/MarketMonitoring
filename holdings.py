@@ -102,10 +102,46 @@ async def _btc_balance(client: httpx.AsyncClient, api_base: str, address: str) -
 
 
 async def _gather_balances(settings: Dict[str, Any]) -> Dict[str, float]:
-    """Fetch balances for all wallets defined in ``settings``."""
+    """Fetch balances for market makers.
+
+    Resolution order:
+    1) If an Arkham configuration is present in ``settings['arkham']``, use
+       Arkham Intelligence to aggregate balances for the provided entity IDs.
+    2) Else if a Nansen configuration is present in ``settings['nansen']``,
+       use Nansen Smart Money API.
+    3) Else fall back to address based aggregation via Etherscan/Blockstream
+       using the ``mm`` address lists (previous behaviour).
+    """
 
     totals = {"BTC": 0.0, "ETH": 0.0, "USDT": 0.0, "USDC": 0.0}
 
+    # 1) Arkham Intelligence provider (optional)
+    if settings.get("arkham"):
+        try:
+            from providers.arkham import fetch_totals as arkham_fetch_totals  # type: ignore
+
+            data = await arkham_fetch_totals(settings["arkham"])  # may raise
+            # Ensure all expected keys exist
+            for k in totals:
+                totals[k] = float(data.get(k, 0.0))
+            return totals
+        except Exception:
+            # Fall through to other sources on any failure
+            pass
+
+    # 2) Nansen provider (optional)
+    if settings.get("nansen"):
+        try:
+            from providers.nansen import fetch_totals as nansen_fetch_totals  # type: ignore
+
+            data = await nansen_fetch_totals(settings["nansen"])  # may raise
+            for k in totals:
+                totals[k] = float(data.get(k, 0.0))
+            return totals
+        except Exception:
+            pass
+
+    # 3) Fallback: sum by explicit wallet addresses (existing behaviour)
     eth_cfg = settings.get("eth", {})
     btc_cfg = settings.get("btc", {})
     api_key = settings.get("etherscan_api_key", "")
@@ -119,7 +155,9 @@ async def _gather_balances(settings: Dict[str, Any]) -> Dict[str, float]:
             btc_addrs: Iterable[str] = btc.get("hot", []) + btc.get("cold", [])
 
             for addr in eth_addrs:
-                totals["ETH"] += await _eth_balance(client, eth_cfg.get("api_base", ""), api_key, addr)
+                totals["ETH"] += await _eth_balance(
+                    client, eth_cfg.get("api_base", ""), api_key, addr
+                )
                 totals["USDT"] += await _token_balance(
                     client,
                     eth_cfg.get("api_base", ""),
@@ -136,7 +174,9 @@ async def _gather_balances(settings: Dict[str, Any]) -> Dict[str, float]:
                 )
 
             for addr in btc_addrs:
-                totals["BTC"] += await _btc_balance(client, btc_cfg.get("api_base", ""), addr)
+                totals["BTC"] += await _btc_balance(
+                    client, btc_cfg.get("api_base", ""), addr
+                )
 
     return totals
 

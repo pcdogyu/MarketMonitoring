@@ -8,6 +8,23 @@
   "btc": {
     "api_base": "https://blockstream.info/api"
   },
+  "arkham": {
+    "api_key": "YOUR_ARKHAM_KEY",
+    "api_base": "https://api.arkhamintelligence.com",
+    "balance_path": "/v1/entity/{id}/balances",
+    "entity_ids": [
+      "ENTITY_ID_1",
+      "ENTITY_ID_2"
+    ]
+  },
+  "nansen": {
+    "api_key": "YOUR_NANSEN_KEY",
+    "api_base": "https://api.nansen.ai",
+    "address_path": "/v1/balances?address={address}",
+    "cluster_path": "/v1/labels/{id}/balances",
+    "addresses": [],
+    "clusters": []
+  },
   "mm": [
     {
       "name": "Wintermute",

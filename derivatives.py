@@ -176,3 +176,103 @@ def append_history(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(hist))
 
+
+# ---------------------------------------------------------------------------
+# Historical backfill via Binance (5m interval)
+
+
+async def backfill_24h(symbol: str) -> Dict[str, Any]:
+    """Return 24h history at 5m interval for ``symbol`` using Binance-only.
+
+    - funding: carry-forward of fundingRate points from ``fapi/v1/fundingRate``
+    - basis:   markPriceKlines - indexPriceKlines (close values)
+    - oi:      futures/data/openInterestHist (5m)
+    """
+
+    interval = "5m"
+    points = 288  # 24h
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        # Basis via mark/index klines
+        basis_x, basis = [], []
+        try:
+            mk = await client.get(
+                "https://fapi.binance.com/fapi/v1/markPriceKlines",
+                params={"symbol": symbol, "interval": interval, "limit": points},
+            )
+            ix = await client.get(
+                "https://fapi.binance.com/fapi/v1/indexPriceKlines",
+                params={"pair": symbol, "interval": interval, "limit": points},
+            )
+            mk.raise_for_status(); ix.raise_for_status()
+            mkd = mk.json(); ixd = ix.json()
+            n = min(len(mkd), len(ixd))
+            for i in range(n):
+                # Each kline: [openTime, open, high, low, close, ...]
+                ts = int(mkd[i][0]) // 1000
+                mclose = float(mkd[i][4]); iclose = float(ixd[i][4])
+                basis_x.append(ts)
+                basis.append(mclose - iclose)
+        except Exception:
+            pass
+
+        # OI history
+        oi_map = {}
+        try:
+            oi_resp = await client.get(
+                "https://fapi.binance.com/futures/data/openInterestHist",
+                params={"symbol": symbol, "period": interval, "limit": points},
+            )
+            oi_resp.raise_for_status()
+            for it in oi_resp.json():
+                ts = int(it.get("timestamp", 0)) // 1000
+                oi_map[ts] = float(it.get("sumOpenInterest", 0))
+        except Exception:
+            pass
+
+        # Funding history (point every 8h); carry forward into 5m grid
+        funding_points = []
+        try:
+            import time as _t
+            end = int(_t.time() * 1000)
+            start = end - 24 * 3600 * 1000
+            fr = await client.get(
+                "https://fapi.binance.com/fapi/v1/fundingRate",
+                params={"symbol": symbol, "startTime": start, "endTime": end, "limit": 1000},
+            )
+            fr.raise_for_status()
+            for it in fr.json():
+                funding_points.append((int(it.get("fundingTime", 0)) // 1000, float(it.get("fundingRate", 0))))
+            funding_points.sort()
+        except Exception:
+            pass
+
+    # align into 5m grid using basis_x as primary timestamps; if empty, build grid
+    if not basis_x:
+        import time as _t
+        now = int(_t.time())
+        start = now - 24 * 3600
+        basis_x = list(range(start - (start % 300), now, 300))
+        basis = [0.0] * len(basis_x)
+
+    # Build series arrays
+    ts_list = basis_x
+    # funding carry-forward
+    f_series = []
+    last_f = 0.0
+    idx = 0
+    for ts in ts_list:
+        while idx < len(funding_points) and funding_points[idx][0] <= ts:
+            last_f = funding_points[idx][1]
+            idx += 1
+        f_series.append(last_f)
+
+    # oi map with default 0
+    oi_series = [oi_map.get(ts, 0.0) for ts in ts_list]
+
+    # timestamps as ISO UTC
+    import time as _t
+    iso = [_t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(t)) for t in ts_list]
+
+    return {"funding": f_series, "basis": basis, "oi": oi_series, "timestamps": iso}
+

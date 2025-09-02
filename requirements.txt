@@ -1,4 +1,5 @@
-fastapi
-uvicorn
-httpx
-python-multipart
+fastapi>=0.110
+uvicorn[standard]>=0.24
+httpx>=0.24
+python-multipart>=0.0.9
+# SQLite uses Python stdlib (sqlite3), no extra package needed
