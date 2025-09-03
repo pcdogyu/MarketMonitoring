@@ -381,17 +381,24 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
         data = json.loads(path.read_text())
         # cut by seconds based on timestamps
         import time
+        import calendar
 
+        # Use UTC for parsing ISO timestamps (which are in Zulu/UTC).
+        # Previously ``time.mktime`` treated the parsed struct_time as local
+        # time, introducing a timezone offset (e.g. -8h in CN) and causing
+        # the last 24h window to exclude recent points.  ``calendar.timegm``
+        # interprets the struct as UTC and returns the correct epoch seconds.
         cutoff = time.time() - secs
         xs = []
         for t in data.get("timestamps", []):
             try:
                 ts = time.strptime(t, "%Y-%m-%dT%H:%M:%SZ")
-                if time.mktime(ts) >= cutoff:
+                if calendar.timegm(ts) >= cutoff:
                     xs.append(True)
                 else:
                     xs.append(False)
             except Exception:
+                # If parsing fails, keep the point rather than dropping it
                 xs.append(True)
         # filter arrays by xs mask
         def filt(arr):
