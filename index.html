@@ -43,7 +43,17 @@
 </div>
 <script>
 const derivSyms=__SYMS__;
-const sym4=['XRPUSDT','XLMUSDT','DOGEUSDT','SUIUSDT','PEPEUSDT','PUMPUSDT','FARTCOINUSDT','WLFIUSDT'];
+const symDecimals={
+  'XRPUSDT':5,
+  'XLMUSDT':4,
+  'DOGEUSDT':4,
+  'SUIUSDT':4,
+  'PEPEUSDT':4,
+  '1000PEPEUSDT':7,
+  'PUMPUSDT':6,
+  'FARTCOINUSDT':4,
+  'WLFIUSDT':4
+};
 let currentSym=derivSyms[0];
 let currentTab='holdings';
 const symMenu=document.getElementById('sym-menu');
@@ -155,7 +165,7 @@ async function load(){
     }
     let ob=await fetch(`/chart/orders?symbol=${currentSym}`).then(r=>r.json());
     let chart=echarts.init(document.getElementById('orders-chart'));
-    let dec=sym4.includes(currentSym)?4:2;
+    let dec=symDecimals[currentSym]??2;
     let priceStr=Number(ob.price).toFixed(dec);
     chart.setOption({
       tooltip:{},
@@ -176,7 +186,7 @@ async function load(){
       wrap.querySelector('h3').textContent=currentSym;
     }
     let td=await fetch(`/chart/trades?symbol=${currentSym}`).then(r=>r.json());
-    let dec=sym4.includes(currentSym)?4:2;
+    let dec=symDecimals[currentSym]??2;
     let tc=echarts.init(document.getElementById('trades-chart'));
     tc.setOption({
       tooltip:{trigger:'axis'},

@@ -88,20 +88,18 @@ async def fetch(symbol: str) -> Dict[str, Any]:
     else:
         mid = 1.0
     exp = math.floor(math.log10(mid)) if mid > 0 else 0
-    specials = {
-        "XRPUSDT",
-        "XLMUSDT",
-        "DOGEUSDT",
-        "SUIUSDT",
-        "PEPEUSDT",
-        "PUMPUSDT",
-        "FARTCOINUSDT",
-        "WLFIUSDT",
+    special_decimals = {
+        "XRPUSDT": 5,
+        "XLMUSDT": 4,
+        "DOGEUSDT": 4,
+        "SUIUSDT": 4,
+        "PEPEUSDT": 4,
+        "1000PEPEUSDT": 7,
+        "PUMPUSDT": 6,
+        "FARTCOINUSDT": 4,
+        "WLFIUSDT": 4,
     }
-    if symbol.upper() in specials:
-        decimals = 4
-    else:
-        decimals = max(2, 2 - exp)
+    decimals = special_decimals.get(symbol.upper(), max(2, 2 - exp))
     interval = max(mid * 0.0001, 10 ** (-decimals))
 
     from collections import defaultdict
