@@ -167,7 +167,18 @@ async function load(){
     let td=await fetch(`/chart/trades?symbol=${currentSym}`).then(r=>r.json());
     let dec=sym4.includes(currentSym)?4:2;
     let tc=echarts.init(document.getElementById('trades-chart'));
-    tc.setOption({tooltip:{trigger:'axis'},xAxis:{type:'category',data:toUTC8(td.times)},yAxis:{type:'value',axisLabel:{formatter:v=>Number(v).toFixed(dec)}},series:[{type:'line',data:td.prices,showSymbol:false,markLine:{silent:true,data:[{yAxis:td.upper,lineStyle:{color:'red'}},{yAxis:td.lower,lineStyle:{color:'green'}}]}}]});
+    tc.setOption({
+      tooltip:{trigger:'axis'},
+      xAxis:{type:'category',data:toUTC8(td.times)},
+      yAxis:[
+        {type:'value',axisLabel:{formatter:v=>Number(v).toFixed(dec)}},
+        {type:'value',axisLabel:{formatter:v=>Number(v).toLocaleString()}},
+      ],
+      series:[
+        {type:'line',data:td.prices,showSymbol:false,markLine:{silent:true,data:[{yAxis:td.upper,lineStyle:{color:'red'}},{yAxis:td.lower,lineStyle:{color:'green'}}]}},
+        {type:'bar',data:td.volumes,yAxisIndex:1,barWidth:'60%',itemStyle:{color:'#91CC75'}},
+      ]
+    });
   }
 }
 setInterval(load,5000);load();
