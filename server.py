@@ -12,9 +12,13 @@ import asyncio
 import csv
 import io
 import json
+import time
+import hmac
+import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -441,6 +445,32 @@ async def chart_orders(symbol: str) -> Dict[str, Any]:
     from orderbook import fetch
 
     return await fetch(symbol.upper())
+
+
+@app.get("/chart/cancels")
+async def chart_cancels(symbol: str) -> Dict[str, Any]:
+    """Return number of cancelled orders for ``symbol`` on Binance."""
+
+    sym = symbol.upper()
+    try:
+        cfg = json.loads(_settings_path().read_text())
+        ex_cfg = cfg.get("exchanges", {}).get("binance")
+        if not ex_cfg:
+            raise KeyError("missing binance config")
+        ts = int(time.time() * 1000)
+        params = {"symbol": sym, "timestamp": ts}
+        query = urlencode(params)
+        sig = hmac.new(ex_cfg["secret"].encode(), query.encode(), hashlib.sha256).hexdigest()
+        headers = {"X-MBX-APIKEY": ex_cfg["api_key"]}
+        url = ex_cfg.get("api_base", "https://api.binance.com") + "/api/v3/allOrders"
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, params={**params, "signature": sig}, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        count = sum(1 for o in data if o.get("status") == "CANCELED")
+    except Exception:
+        count = 0
+    return {"symbol": sym, "count": count}
 
 
 @app.get("/chart/trades")
