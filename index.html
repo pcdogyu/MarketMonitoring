@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+<meta charset='utf-8'>
+<title>MarketMonitoring</title>
+<script src='https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js'></script>
+<style>.menu{padding:4px 8px;border:1px solid #ccc;background:#fff;cursor:pointer;} .menu.active{background:#1890ff;color:#fff;}</style>
+</head>
+<body>
+<h1>Market Monitoring</h1>
+<div style='display:flex;gap:8px;flex-wrap:wrap'>
+  <button class='menu top active' onclick="showTab('holdings',this)">持仓</button>
+  <button class='menu top' onclick="showTab('predict',this)">预测</button>
+  <button class='menu top' onclick="showTab('derivs',this)">衍生品</button>
+  <button class='menu top' onclick="showTab('orders',this)">挂单</button>
+  <button class='menu top' onclick="showTab('trades',this)">成交</button>
+  <button class='menu top' onclick="showTab('settings',this)">设置</button>
+</div>
+<div id='sym-menu' style='display:none;gap:8px;flex-wrap:wrap;margin-top:8px'></div>
+<div id='tab-holdings'>
+  <div id='holdings-bar' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>
+  <div id='holdings-line' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>
+</div>
+<div id='tab-predict' style='display:none'>
+  <div id='predict-json' style='margin-top:10px'></div>
+</div>
+<div id='tab-derivs' style='display:none'>
+  <div style='margin:10px 0;color:#555;font-size:13px'>时间已转换为中国时区 (UTC+8)</div>
+  <div id='derivs-wrap' style='display:grid;grid-template-columns:140px 1fr 1fr 1fr;gap:10px;align-items:start'></div>
+</div>
+<div id='tab-orders' style='display:none'>
+  <div id='orders-wrap' style='margin-top:10px;width:100%'></div>
+</div>
+<div id='tab-trades' style='display:none'>
+  <div id='trades-wrap' style='margin-top:10px;width:100%'></div>
+</div>
+<div id='tab-settings' style='display:none'>
+  <h3>系统设置</h3>
+  <textarea id='settings-text' style='width:100%;height:200px'></textarea>
+  <div style='text-align:right;margin-top:5px'>
+    <button onclick='saveSettings()'>保存</button>
+  </div>
+</div>
+<script>
+const derivSyms=__SYMS__;
+const sym4=['XRPUSDT','XLMUSDT','DOGEUSDT','SUIUSDT','PEPEUSDT','PUMPUSDT','FARTCOINUSDT','WLFIUSDT'];
+let currentSym=derivSyms[0];
+let currentTab='holdings';
+const symMenu=document.getElementById('sym-menu');
+function initSymMenu(){
+  if(symMenu.hasChildNodes()) return;
+  derivSyms.forEach((s,i)=>{
+    let b=document.createElement('button');
+    b.textContent=s;
+    b.className='menu';
+    if(i===0) b.classList.add('active');
+    b.onclick=()=>showSym(s,b);
+    symMenu.appendChild(b);
+  });
+}
+function showSym(sym,btn){
+  currentSym=sym;
+  symMenu.querySelectorAll('.menu').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if(currentTab==='derivs') document.getElementById('derivs-wrap').innerHTML='';
+  if(currentTab==='orders') document.getElementById('orders-wrap').innerHTML='';
+  if(currentTab==='trades') document.getElementById('trades-wrap').innerHTML='';
+  load();
+}
+function showTab(tab,btn){
+  currentTab=tab;
+  document.getElementById('tab-holdings').style.display=(tab==='holdings')?'block':'none';
+  document.getElementById('tab-predict').style.display=(tab==='predict')?'block':'none';
+  document.getElementById('tab-derivs').style.display=(tab==='derivs')?'block':'none';
+  document.getElementById('tab-orders').style.display=(tab==='orders')?'block':'none';
+  document.getElementById('tab-trades').style.display=(tab==='trades')?'block':'none';
+  document.getElementById('tab-settings').style.display=(tab==='settings')?'block':'none';
+  document.querySelectorAll('.menu.top').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  const needsSym=['derivs','orders','trades'].includes(tab);
+  symMenu.style.display=needsSym?'flex':'none';
+  if(needsSym) initSymMenu();
+  if(tab==='settings') loadSettings();
+  load();
+}
+async function loadSettings(){
+  let cfg=await fetch('/settings').then(r=>r.json());
+  document.getElementById('settings-text').value=JSON.stringify(cfg,null,2);
+}
+async function saveSettings(){
+  try{
+    let data=JSON.parse(document.getElementById('settings-text').value);
+    await fetch('/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    alert('已保存');
+  }catch(e){alert('JSON 无效');}
+}
+function toUTC8(arr){
+  return (arr||[]).map(t=>{
+    try{
+      let d=new Date(t);
+      if(!isNaN(d)){
+        d=new Date(d.getTime()+8*3600*1000);
+        let m=(d.getUTCMonth()+1).toString().padStart(2,'0');
+        let day=d.getUTCDate().toString().padStart(2,'0');
+        let hh=d.getUTCHours().toString().padStart(2,'0');
+        let mm=d.getUTCMinutes().toString().padStart(2,'0');
+        return `${m}-${day} ${hh}:${mm}`;
+      }
+    }catch(e){}
+    return t;
+  });
+}
+async function load(){
+  if(currentTab==='holdings'){
+    let snap=await fetch('/mm/holdings').then(r=>r.json());
+    let bar=echarts.init(document.getElementById('holdings-bar'));
+    bar.setOption({title:{text:'最近快照'},xAxis:{type:'category',data:Object.keys(snap.totals)},yAxis:{type:'value'},series:[{data:Object.values(snap.totals),type:'bar'}]});
+    let hist=await fetch('/chart/holdings').then(r=>r.json());
+    let line=echarts.init(document.getElementById('holdings-line'));
+    line.setOption({tooltip:{trigger:'axis'},legend:{data:['BTC','ETH','USDT','USDC']},xAxis:{type:'category',data:hist.time},yAxis:{type:'value'},series:[{name:'BTC',type:'line',data:hist.BTC},{name:'ETH',type:'line',data:hist.ETH},{name:'USDT',type:'line',data:hist.USDT},{name:'USDC',type:'line',data:hist.USDC}]});
+  }else if(currentTab==='predict'){
+    let pred1=await fetch('/predict/BTCUSDT').then(r=>r.json());
+    let pred2=await fetch('/predict/ETHUSDT').then(r=>r.json());
+    document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><p style="color:#555;font-size:14px">数据来源:data/holdings_history.json, 信号计算为 ΔBTC/ETH - 0.8·ΔUSDT - 0.4·ΔUSDC</p><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';
+  }else if(currentTab==='derivs'){
+    let wrap=document.getElementById('derivs-wrap');
+    if(!wrap.hasChildNodes()){
+      ['Symbol','Funding','Basis','OI'].forEach(h=>{let el=document.createElement('div');el.style.fontWeight='bold';el.style.margin='6px 0';el.textContent=h;wrap.appendChild(el);});
+      let label=document.createElement('div');label.style.fontWeight='bold';label.style.marginTop='10px';label.textContent=currentSym;wrap.appendChild(label);
+      ['funding','basis','oi'].forEach(kind=>{let box=document.createElement('div');box.id='derivs-'+kind;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});
+    }
+    let d=await fetch(`/chart/derivs?symbol=${currentSym}`).then(r=>r.json());
+    let x=toUTC8(d.timestamps);
+    let f=(d.funding||[]).map(v=>Number(v)*100);
+    let b=(d.basis||[]).map(v=>Number(v));
+    let o=(d.oi||[]).map(v=>Number(v));
+    let mk=(id,name,data,axisFmt,color)=>{
+      let c=echarts.init(document.getElementById(id));
+      c.setOption({
+        tooltip:{trigger:'axis',formatter:(ps)=>{let p=ps[0];return p.axisValueLabel+'<br/>'+name+': '+axisFmt(p.data);}},
+        xAxis:{type:'category',data:x},
+        yAxis:{type:'value',name:name,axisLabel:{formatter:(val)=>axisFmt(val)}},
+        series:[{name,showSymbol:false,type:'line',data,lineStyle:{color},itemStyle:{color}}]
+      });
+    };
+    mk('derivs-funding','Funding (%)',f,v=>Number(v).toFixed(8)+'%','#5470C6');
+    mk('derivs-basis','Basis (USD)',b,v=>'$'+Number(v).toFixed(2),'#EE6666');
+    mk('derivs-oi','Open Interest',o,v=>Number(v).toLocaleString(),'#91CC75');
+  }else if(currentTab==='orders'){
+    let wrap=document.getElementById('orders-wrap');
+    if(!wrap.hasChildNodes()){
+      wrap.innerHTML=`<h3>${currentSym} Bids/Asks</h3><div id='orders-chart' style='width:100%;height:600px;border:1px solid #ccc'></div>`;
+    }else{
+      wrap.querySelector('h3').textContent=`${currentSym} Bids/Asks`;
+    }
+    let ob=await fetch(`/chart/orders?symbol=${currentSym}`).then(r=>r.json());
+    let chart=echarts.init(document.getElementById('orders-chart'));
+    let dec=sym4.includes(currentSym)?4:2;
+    chart.setOption({tooltip:{},legend:{data:['buy','sell']},xAxis:{type:'category',data:ob.prices.map(p=>Number(p).toFixed(dec))},yAxis:{type:'value'},series:[{name:'buy',data:ob.buy,type:'bar'},{name:'sell',data:ob.sell,type:'bar'}]});
+  }else if(currentTab==='trades'){
+    let wrap=document.getElementById('trades-wrap');
+    if(!wrap.hasChildNodes()){
+      wrap.innerHTML=`<h3>${currentSym}</h3><div id='trades-chart' style='width:800px;height:320px;border:1px solid #ccc'></div>`;
+    }else{
+      wrap.querySelector('h3').textContent=currentSym;
+    }
+    let td=await fetch(`/chart/trades?symbol=${currentSym}`).then(r=>r.json());
+    let dec=sym4.includes(currentSym)?4:2;
+    let tc=echarts.init(document.getElementById('trades-chart'));
+    tc.setOption({tooltip:{trigger:'axis'},xAxis:{type:'category',data:toUTC8(td.times)},yAxis:{type:'value',axisLabel:{formatter:v=>Number(v).toFixed(dec)}},series:[{type:'line',data:td.prices,showSymbol:false,markLine:{silent:true,data:[{yAxis:td.upper,lineStyle:{color:'red'}},{yAxis:td.lower,lineStyle:{color:'green'}}]}}]});
+  }
+}
+setInterval(load,5000);load();
+</script>
+</body>
+</html>
