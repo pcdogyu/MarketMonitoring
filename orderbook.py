@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Any
 
 import httpx
 
@@ -66,8 +66,14 @@ async def _okx(symbol: str) -> Tuple[float, float]:
         return 0.0, 0.0
 
 
-async def fetch(symbol: str) -> Dict[str, float]:
-    """Aggregate open buy/sell volumes across Binance, Bybit and OKX."""
+async def fetch(symbol: str) -> Dict[str, Any]:
+    """Aggregate open buy/sell volumes across Binance, Bybit and OKX.
+
+    The returned mapping includes the ``symbol`` string alongside the numeric
+    ``buy`` and ``sell`` volume totals.  Using ``Dict[str, Any]`` accurately
+    represents this shape and prevents type checkers or FastAPI's response
+    validation from assuming all values are floats.
+    """
     results = await asyncio.gather(_binance(symbol), _bybit(symbol), _okx(symbol))
     buy = sum(r[0] for r in results)
     sell = sum(r[1] for r in results)
