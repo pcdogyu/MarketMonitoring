@@ -2,6 +2,7 @@
 
 ## 功能
 - 做市商持仓监控（ETH / BTC）
+- 交易所持仓监控（Binance / Bybit / OKX）
 - 链上数据源（预留）：
   - ETH & ERC20 (USDT, USDC) via Etherscan
   - BTC via Blockstream API

@@ -30,6 +30,7 @@ from db import (
     save_price as db_save_price,
 )
 from holdings import refresh_holdings
+from exchange_holdings import refresh_exchange_holdings
 
 app = FastAPI()
 
@@ -111,6 +112,12 @@ async def _refresh_once() -> Dict[str, Any]:
         db_save_holdings(snapshot)
     except Exception:
         pass
+    # also refresh centralised exchange holdings
+    try:
+        global LAST_CEX_SNAPSHOT
+        LAST_CEX_SNAPSHOT = await refresh_exchange_holdings(str(_settings_path()))
+    except Exception:
+        LAST_CEX_SNAPSHOT = {"time": ts, "exchanges": {}}
     cfg = json.loads(_settings_path().read_text())
     interval = int(cfg.get("refresh_interval_sec", 300))
     symbols = _symbols()
@@ -138,6 +145,7 @@ async def _refresh_once() -> Dict[str, Any]:
 
 # Global state updated on each refresh
 LAST_SNAPSHOT: Dict[str, Any] | None = None
+LAST_CEX_SNAPSHOT: Dict[str, Any] | None = None
 
 
 async def _refresh_loop() -> None:
@@ -323,6 +331,16 @@ def mm_holdings() -> Dict[str, Any]:
     return LAST_SNAPSHOT or {"time": None, "totals": {}}
 
 
+@app.get("/cex/holdings")
+def cex_holdings() -> Dict[str, Any]:
+    """Return the latest centralised exchange holdings snapshot."""
+
+    if LAST_CEX_SNAPSHOT:
+        return LAST_CEX_SNAPSHOT
+    hist = _load_history(BASE_DIR / "data" / "exchange_holdings_history.json")
+    return hist[-1] if hist else {"time": None, "exchanges": {}}
+
+
 @app.get("/chart/holdings")
 def chart_holdings() -> Dict[str, Any]:
     """Return holdings history as time series."""
@@ -335,6 +353,13 @@ def chart_holdings() -> Dict[str, Any]:
         "USDT": [h["totals"].get("USDT", 0) for h in hist],
         "USDC": [h["totals"].get("USDC", 0) for h in hist],
     }
+
+
+@app.get("/chart/cex_holdings")
+def chart_cex_holdings() -> Any:
+    """Return centralised exchange holdings history."""
+
+    return _load_history(BASE_DIR / "data" / "exchange_holdings_history.json")
 
 
 @app.get("/predict/{symbol}")
