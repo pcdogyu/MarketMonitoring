@@ -162,9 +162,23 @@ async def _startup() -> None:
     history = _load_history(BASE_DIR / "data" / "holdings_history.json")
     if history:
         LAST_SNAPSHOT = history[-1]
+    # Perform a 24h derivatives backfill before starting the periodic refresh.
+    #
+    # Previously the refresh loop was spawned before the backfill which meant
+    # that the first `_refresh_once` call created non-empty history files.  The
+    # subsequent backfill then skipped because it detected existing data,
+    # leaving charts with only a couple of points.  By awaiting the backfill
+    # here we guarantee that the historical data is populated on startup,
+    # allowing the front‑end charts to immediately display a full 24‑hour
+    # window.
+    try:
+        await _maybe_backfill_24h()
+    except Exception:
+        # Ignore backfill errors – regular refresh will still populate data
+        pass
+
+    # Start background refresh loop after backfill completes
     asyncio.create_task(_refresh_loop())
-    # Kick off a one-time backfill for derivatives if history is empty
-    asyncio.create_task(_maybe_backfill_24h())
 
 
 async def _maybe_backfill_24h() -> None:
