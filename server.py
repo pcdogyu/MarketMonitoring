@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 import httpx
 
@@ -249,10 +249,19 @@ def index() -> str:
         "<meta charset='utf-8'>\n"
         "<title>MarketMonitoring</title>\n"
         "<script src='https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js'></script>\n"
-        "<style>.menu{padding:4px 8px;border:1px solid #ccc;background:#fff;cursor:pointer;} .menu.active{background:#1890ff;color:#fff;}</style>\n"
+        "<style>.menu{padding:4px 8px;border:1px solid #ccc;background:#fff;cursor:pointer;} .menu.active{background:#1890ff;color:#fff;}#settings-modal{display:none;position:fixed;top:40px;right:40px;width:320px;padding:10px;border:1px solid #ccc;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,0.15);}</style>\n"
         "</head>\n"
         "<body>\n"
         "<h1>Market Monitoring</h1>\n"
+        "<button id='btn-settings' style='position:fixed;top:10px;right:10px'>设置</button>\n"
+        "<div id='settings-modal'>\n"
+        "  <h3>系统设置</h3>\n"
+        "  <textarea id='settings-text' style='width:100%;height:200px'></textarea>\n"
+        "  <div style='text-align:right;margin-top:5px'>\n"
+        "    <button onclick='saveSettings()'>保存</button>\n"
+        "    <button onclick='closeSettings()'>关闭</button>\n"
+        "  </div>\n"
+        "</div>\n"
         "<div id='price-compare' style='display:flex;flex-direction:column;gap:4px;margin:10px 0'></div>\n"
         "<div style='display:flex;gap:8px;flex-wrap:wrap'>\n"
         "  <button class='menu active' onclick=\"showTab('holdings',this)\">持仓</button>\n"
@@ -280,6 +289,22 @@ def index() -> str:
         "</div>\n"
         "<script>\n"
         f"const derivSyms={json.dumps(_symbols())};\n"
+        "const settingsModal=document.getElementById('settings-modal');\n"
+        "async function openSettings(){\n"
+        "  let cfg=await fetch('/settings').then(r=>r.json());\n"
+        "  document.getElementById('settings-text').value=JSON.stringify(cfg,null,2);\n"
+        "  settingsModal.style.display='block';\n"
+        "}\n"
+        "function closeSettings(){settingsModal.style.display='none';}\n"
+        "async function saveSettings(){\n"
+        "  try{\n"
+        "    let data=JSON.parse(document.getElementById('settings-text').value);\n"
+        "    await fetch('/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});\n"
+        "    alert('已保存');\n"
+        "    closeSettings();\n"
+        "  }catch(e){alert('JSON 无效');}\n"
+        "}\n"
+        "document.getElementById('btn-settings').onclick=openSettings;\n"
         "function showTab(tab,btn){\n"
         "  document.getElementById('tab-holdings').style.display = (tab==='holdings')?'block':'none';\n"
         "  document.getElementById('tab-predict').style.display  = (tab==='predict')?'block':'none';\n"
@@ -620,6 +645,29 @@ async def labels_import(file: UploadFile = File(...)) -> Any:
         return JSONResponse({"error": "invalid format"}, status_code=400)
 
     _settings_path().write_text(json.dumps(labels, indent=2))
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Settings endpoints
+
+
+@app.get("/settings")
+def get_settings() -> Dict[str, Any]:
+    """Return current system settings."""
+
+    try:
+        return json.loads(_settings_path().read_text())
+    except Exception:
+        return {}
+
+
+@app.post("/settings")
+async def update_settings(req: Request) -> Dict[str, str]:
+    """Overwrite settings.json with provided configuration."""
+
+    data = await req.json()
+    _settings_path().write_text(json.dumps(data, indent=2))
     return {"status": "ok"}
 
 
