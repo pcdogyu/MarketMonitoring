@@ -38,6 +38,19 @@ app = FastAPI()
 # Base directory of the project – ensures paths work regardless of CWD
 BASE_DIR = Path(__file__).resolve().parent
 
+# Symbols displayed in the price comparison list with their desired precision
+PRICE_COMPARE: Dict[str, int] = {
+    "XLMUSDT": 5,
+    "XRPUSDT": 4,
+    "DOGEUSDT": 5,
+    "SUIUSDT": 4,
+    "PEPEUSDT": 9,
+    "BTCUSDT": 0,
+    "PUMPUSDT": 6,
+    "FARTCOINUSDT": 4,
+    "WLFIUSDT": 4,
+}
+
 
 # ---------------------------------------------------------------------------
 # Utility helpers
@@ -239,6 +252,7 @@ def index() -> str:
         "</head>\n"
         "<body>\n"
         "<h1>Market Monitoring</h1>\n"
+        "<div id='price-compare' style='display:flex;flex-direction:column;gap:4px;margin:10px 0'></div>\n"
         "<div style='display:flex;gap:8px;flex-wrap:wrap'>\n"
         "  <button class='menu active' onclick=\"showTab('holdings',this)\">持仓</button>\n"
         "  <button class='menu' onclick=\"showTab('predict',this)\">预测</button>\n"
@@ -270,6 +284,9 @@ def index() -> str:
         "  if(btn) btn.classList.add('active');\n"
         "}\n"
         "async function load(){\n"
+        "  let prices = await fetch('/price/compare').then(r=>r.json());\n"
+        "  let pbox=document.getElementById('price-compare');pbox.innerHTML='';\n"
+        "  Object.entries(prices).forEach(([s,v])=>{let el=document.createElement('div');el.textContent=s.replace('USDT','')+': $'+v;pbox.appendChild(el);});\n"
         "  let snap = await fetch('/mm/holdings').then(r=>r.json());\n"
         "  let bar = echarts.init(document.getElementById('holdings-bar'));\n"
         "  bar.setOption({title:{text:'最近快照'},xAxis:{type:'category',data:Object.keys(snap.totals)},yAxis:{type:'value'},series:[{data:Object.values(snap.totals),type:'bar'}]});\n"
@@ -374,6 +391,21 @@ def chart_cex_holdings() -> Any:
     """Return centralised exchange holdings history."""
 
     return _load_history(BASE_DIR / "data" / "exchange_holdings_history.json")
+
+
+@app.get("/price/compare")
+async def price_compare() -> Dict[str, str]:
+    """Return latest prices for selected symbols with custom precision."""
+
+    tasks = [fetch_price(sym) for sym in PRICE_COMPARE]
+    values = await asyncio.gather(*tasks)
+    data: Dict[str, str] = {}
+    for (sym, prec), price in zip(PRICE_COMPARE.items(), values):
+        if prec == 0:
+            data[sym] = str(int(round(price)))
+        else:
+            data[sym] = f"{price:.{prec}f}"
+    return data
 
 
 @app.get("/predict/{symbol}")
