@@ -322,7 +322,7 @@ def index() -> str:
         "        series:[{name,showSymbol:false,type:'line',data,lineStyle:{color},itemStyle:{color}}]\n"
         "      });\n"
         "    };\n"
-        "    mk(`derivs-${s.toLowerCase()}-funding`,'Funding (%)',f,(v)=>Number(v).toFixed(2)+'%', '#5470C6');\n"
+        "    mk(`derivs-${s.toLowerCase()}-funding`,'Funding (%)',f,(v)=>Number(v).toFixed(8)+'%', '#5470C6');\n"
         "    mk(`derivs-${s.toLowerCase()}-basis`,'Basis (USD)',b,(v)=>'$'+Number(v).toFixed(2), '#EE6666');\n"
         "    mk(`derivs-${s.toLowerCase()}-oi`,'Open Interest',o,(v)=>Number(v).toLocaleString(), '#91CC75');\n"
         "  }\n"
