@@ -29,7 +29,17 @@ def init_db() -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS prices (
+              symbol TEXT NOT NULL,
+              ts TEXT NOT NULL,
+              price REAL
+            )
+            """
+        )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_derivs_sym_ts ON derivs(symbol, ts)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_prices_sym_ts ON prices(symbol, ts)")
         con.commit()
 
 
@@ -54,6 +64,17 @@ def save_derivs(symbol: str, data: Dict[str, Any]) -> None:
         con.execute(
             "INSERT INTO derivs(symbol,ts,funding,basis,oi) VALUES (?,?,?,?,?)",
             (symbol, ts, float(data.get("funding", 0)), float(data.get("basis", 0)), float(data.get("oi", 0))),
+        )
+        con.commit()
+
+
+def save_price(symbol: str, ts: str, price: float) -> None:
+    """Persist a price point into SQLite."""
+
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute(
+            "INSERT INTO prices(symbol,ts,price) VALUES (?,?,?)",
+            (symbol, ts, float(price)),
         )
         con.commit()
 
@@ -87,6 +108,26 @@ def query_derivs(symbol: str, since_seconds: int | None = None) -> Dict[str, Any
         "oi": [r[3] for r in rows],
         "timestamps": [r[0] for r in rows],
     }
+
+
+def query_price(symbol: str, since_seconds: int | None = None) -> Dict[str, Any]:
+    """Load price history for ``symbol`` from DB."""
+
+    with sqlite3.connect(DB_PATH) as con:
+        cur = con.cursor()
+        if since_seconds is None:
+            cur.execute(
+                "SELECT ts,price FROM prices WHERE symbol=? ORDER BY ts",
+                (symbol,),
+            )
+        else:
+            cur.execute(
+                "SELECT ts,price FROM prices WHERE symbol=? AND ts>=? ORDER BY ts",
+                (symbol, _cutoff_iso(since_seconds)),
+            )
+        rows = cur.fetchall()
+
+    return {"price": [r[1] for r in rows], "timestamps": [r[0] for r in rows]}
 
 
 def _cutoff_iso(since_seconds: int) -> str:
