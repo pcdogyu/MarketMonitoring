@@ -49,8 +49,14 @@
     "SOLUSDT",
     "XLMUSDT",
     "XRPUSDT",
+    "DOGEUSDT",
+    "SUIUSDT",
+    "PEPEUSDT",
     "AAVEUSDT",
-    "BNBUSDT"
+    "BNBUSDT",
+    "PUMPUSDT",
+    "FARTCOINUSDT",
+    "WLFIUSDT"
   ],
   "mm": [
     {
