@@ -244,7 +244,11 @@ async def _maybe_backfill_24h() -> None:
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
     """Serve a very small ECharts based front-end."""
-    tpl = (BASE_DIR / "index.html").read_text()
+    # Explicitly decode index.html as UTF-8 so that the application works on
+    # systems whose default locale uses a different encoding (e.g. GBK on
+    # Windows). Without this, reading the file with ``Path.read_text`` can
+    # raise ``UnicodeDecodeError`` when the HTML contains non-ASCII characters.
+    tpl = (BASE_DIR / "index.html").read_text(encoding="utf-8")
     return tpl.replace("__SYMS__", json.dumps(_symbols()))
 
 # ---------------------------------------------------------------------------
