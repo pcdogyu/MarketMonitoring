@@ -12,6 +12,7 @@ import asyncio
 import csv
 import io
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
 
@@ -258,6 +259,7 @@ def index() -> str:
         "  <button class='menu' onclick=\"showTab('predict',this)\">预测</button>\n"
         "  <button class='menu' onclick=\"showTab('derivs',this)\">衍生品</button>\n"
         "  <button class='menu' onclick=\"showTab('orders',this)\">挂单</button>\n"
+        "  <button class='menu' onclick=\"showTab('trades',this)\">成交</button>\n"
         "</div>\n"
         "<div id='tab-holdings'>\n"
         "  <div id='holdings-bar' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>\n"
@@ -273,6 +275,9 @@ def index() -> str:
         "<div id='tab-orders' style='display:none'>\n"
         "  <div id='orders-wrap' style='display:flex;flex-direction:column;gap:10px;margin-top:10px;width:100%'></div>\n"
         "</div>\n"
+        "<div id='tab-trades' style='display:none'>\n"
+        "  <div id='trades-wrap' style='display:flex;flex-direction:column;gap:10px;margin-top:10px;width:100%'></div>\n"
+        "</div>\n"
         "<script>\n"
         f"const derivSyms={json.dumps(_symbols())};\n"
         "function showTab(tab,btn){\n"
@@ -280,6 +285,7 @@ def index() -> str:
         "  document.getElementById('tab-predict').style.display  = (tab==='predict')?'block':'none';\n"
         "  document.getElementById('tab-derivs').style.display   = (tab==='derivs')?'block':'none';\n"
         "  document.getElementById('tab-orders').style.display   = (tab==='orders')?'block':'none';\n"
+        "  document.getElementById('tab-trades').style.display   = (tab==='trades')?'block':'none';\n"
         "  document.querySelectorAll('.menu').forEach(b=>b.classList.remove('active'));\n"
         "  if(btn) btn.classList.add('active');\n"
         "}\n"
@@ -334,6 +340,15 @@ def index() -> str:
         "    let ob=await fetch(`/chart/orders?symbol=${s}`).then(r=>r.json());\n"
         "    let chart=echarts.init(document.getElementById(`orders-${s.toLowerCase()}`));\n"
         "    chart.setOption({tooltip:{},legend:{data:['buy','sell']},xAxis:{type:'category',data:ob.prices.map(p=>Number(p).toFixed(2))},yAxis:{type:'value'},series:[{name:'buy',data:ob.buy,type:'bar'},{name:'sell',data:ob.sell,type:'bar'}]});\n"
+        "  }\n"
+        "  let tradesWrap=document.getElementById('trades-wrap');\n"
+        "  if(!tradesWrap.hasChildNodes()){\n"
+        "    derivSyms.forEach(s=>{let box=document.createElement('div');box.innerHTML=`<h3>${s}</h3><div id='trades-${s.toLowerCase()}' style='width:800px;height:320px;border:1px solid #ccc'></div>`;tradesWrap.appendChild(box);});\n"
+        "  }\n"
+        "  for(let s of derivSyms){\n"
+        "    let td=await fetch(`/chart/trades?symbol=${s}`).then(r=>r.json());\n"
+        "    let tc=echarts.init(document.getElementById(`trades-${s.toLowerCase()}`));\n"
+        "    tc.setOption({tooltip:{trigger:'axis'},xAxis:{type:'category',data:toUTC8(td.times)},yAxis:{type:'value'},series:[{type:'line',data:td.prices,showSymbol:false,markLine:{silent:true,data:[{yAxis:td.upper,lineStyle:{color:'red'}},{yAxis:td.lower,lineStyle:{color:'green'}}]}}]});\n"
         "  }\n"
         "}\n"
         "setInterval(load,5000);\nload();\n</script>\n"
@@ -545,6 +560,49 @@ async def chart_orders(symbol: str) -> Dict[str, Any]:
     from orderbook import fetch
 
     return await fetch(symbol.upper())
+
+
+@app.get("/chart/trades")
+async def chart_trades(symbol: str) -> Dict[str, Any]:
+    """Return price series and 70% volume range for ``symbol`` since UTC+8 day start."""
+
+    sym = symbol.upper()
+    tz = timezone(timedelta(hours=8))
+    now = datetime.now(tz)
+    start = datetime(now.year, now.month, now.day, tzinfo=tz)
+    start_ms = int(start.timestamp() * 1000)
+    url = "https://api.binance.com/api/v3/klines"
+    params = {"symbol": sym, "interval": "5m", "startTime": start_ms, "limit": 1000}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        data = []
+
+    times = [int(k[0]) for k in data]
+    closes = [float(k[4]) for k in data]
+    volumes = [float(k[5]) for k in data]
+    total = sum(volumes)
+    lower = upper = 0.0
+    if total > 0:
+        pairs = sorted(zip(closes, volumes))
+        cum = 0.0
+        lower_bound = total * 0.15
+        upper_bound = total * 0.85
+        l = None
+        u = None
+        for price, vol in pairs:
+            cum += vol
+            if l is None and cum >= lower_bound:
+                l = price
+            if u is None and cum >= upper_bound:
+                u = price
+                break
+        lower = l if l is not None else pairs[0][0]
+        upper = u if u is not None else pairs[-1][0]
+    return {"symbol": sym, "times": times, "prices": closes, "lower": lower, "upper": upper}
 
 
 @app.post("/labels/import")
