@@ -76,23 +76,18 @@ async def fetch(symbol: str) -> Dict[str, Any]:
     """
     books = await asyncio.gather(_binance(symbol), _bybit(symbol), _okx(symbol))
 
-    # Determine interval based on symbol
-    if symbol == "BTCUSDT":
-        interval = 50.0
-    elif symbol == "ETHUSDT":
-        interval = 20.0
+    # Determine interval based on symbol using SOLUSDT-style precision
+    # Use mid price from first book as base for 0.01% buckets
+    bids0, asks0 = books[0]
+    if bids0 and asks0:
+        mid = (bids0[0][0] + asks0[0][0]) / 2
+    elif bids0:
+        mid = bids0[0][0]
+    elif asks0:
+        mid = asks0[0][0]
     else:
-        # Use mid price from first book as base for 1% buckets
-        bids0, asks0 = books[0]
-        if bids0 and asks0:
-            mid = (bids0[0][0] + asks0[0][0]) / 2
-        elif bids0:
-            mid = bids0[0][0]
-        elif asks0:
-            mid = asks0[0][0]
-        else:
-            mid = 1.0
-        interval = mid * 0.01
+        mid = 1.0
+    interval = max(mid * 0.0001, 0.01)
 
     from collections import defaultdict
     buckets: Dict[float, Dict[str, float]] = defaultdict(lambda: {"buy": 0.0, "sell": 0.0})
@@ -106,6 +101,7 @@ async def fetch(symbol: str) -> Dict[str, Any]:
             buckets[bucket]["sell"] += qty
 
     prices = sorted(buckets.keys())
+    prices = [round(p, 2) for p in prices]
     buy = [buckets[p]["buy"] for p in prices]
     sell = [buckets[p]["sell"] for p in prices]
     return {"symbol": symbol, "prices": prices, "buy": buy, "sell": sell}

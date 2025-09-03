@@ -316,7 +316,7 @@ def index() -> str:
         "  for(let s of derivSyms){\n"
         "    let ob=await fetch(`/chart/orders?symbol=${s}`).then(r=>r.json());\n"
         "    let chart=echarts.init(document.getElementById(`orders-${s.toLowerCase()}`));\n"
-        "    chart.setOption({tooltip:{},legend:{data:['buy','sell']},xAxis:{type:'category',data:ob.prices.map(p=>p.toString())},yAxis:{type:'value'},series:[{name:'buy',data:ob.buy,type:'bar'},{name:'sell',data:ob.sell,type:'bar'}]});\n"
+        "    chart.setOption({tooltip:{},legend:{data:['buy','sell']},xAxis:{type:'category',data:ob.prices.map(p=>Number(p).toFixed(2))},yAxis:{type:'value'},series:[{name:'buy',data:ob.buy,type:'bar'},{name:'sell',data:ob.sell,type:'bar'}]});\n"
         "  }\n"
         "}\n"
         "setInterval(load,5000);\nload();\n</script>\n"
