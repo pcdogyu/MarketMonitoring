@@ -93,7 +93,7 @@ async def fetch(symbol: str) -> Dict[str, Any]:
         "XLMUSDT": 4,
         "DOGEUSDT": 4,
         "SUIUSDT": 4,
-        "PEPEUSDT": 4,
+        "PEPEUSDT": 8,
         "1000PEPEUSDT": 7,
         "PUMPUSDT": 6,
         "FARTCOINUSDT": 4,
