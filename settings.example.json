@@ -25,6 +25,15 @@
     "addresses": [],
     "clusters": []
   },
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "SOLUSDT",
+    "XLMUSDT",
+    "XRPUSDT",
+    "AAVEUSDT",
+    "BNBUSDT"
+  ],
   "mm": [
     {
       "name": "Wintermute",

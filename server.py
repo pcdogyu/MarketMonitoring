@@ -17,11 +17,18 @@ from typing import Any, Dict
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
+import httpx
 
 from derivatives import append_history as append_deriv_history
 from derivatives import fetch_all as fetch_derivs
 from derivatives import backfill_24h as derivs_backfill
-from db import init_db, save_derivs as db_save_derivs, save_holdings as db_save_holdings, query_derivs as db_query_derivs
+from db import (
+    init_db,
+    save_derivs as db_save_derivs,
+    save_holdings as db_save_holdings,
+    query_derivs as db_query_derivs,
+    save_price as db_save_price,
+)
 from holdings import refresh_holdings
 
 app = FastAPI()
@@ -42,11 +49,56 @@ def _settings_path() -> Path:
     return p
 
 
+def _symbols() -> list[str]:
+    """Return list of monitored trading pairs from settings."""
+
+    try:
+        cfg = json.loads(_settings_path().read_text())
+        syms = cfg.get(
+            "symbols",
+            [
+                "BTCUSDT",
+                "ETHUSDT",
+                "SOLUSDT",
+                "XLMUSDT",
+                "XRPUSDT",
+                "AAVEUSDT",
+                "BNBUSDT",
+            ],
+        )
+        return [str(s).upper() for s in syms]
+    except Exception:
+        return [
+            "BTCUSDT",
+            "ETHUSDT",
+            "SOLUSDT",
+            "XLMUSDT",
+            "XRPUSDT",
+            "AAVEUSDT",
+            "BNBUSDT",
+        ]
+
+
 def _load_history(path: Path) -> list[Dict[str, Any]]:
     try:
         return json.loads(path.read_text())
     except Exception:
         return []
+
+
+async def fetch_price(symbol: str) -> float:
+    """Fetch latest spot price for ``symbol`` via Binance."""
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.binance.com/api/v3/ticker/price",
+                params={"symbol": symbol},
+            )
+            resp.raise_for_status()
+            return float(resp.json().get("price", 0))
+    except Exception:
+        return 0.0
 
 
 async def _refresh_once() -> Dict[str, Any]:
@@ -61,7 +113,7 @@ async def _refresh_once() -> Dict[str, Any]:
         pass
     cfg = json.loads(_settings_path().read_text())
     interval = int(cfg.get("refresh_interval_sec", 300))
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XLMUSDT", "XRPUSDT", "AAVEUSDT"]
+    symbols = _symbols()
     max_points = int(12 * 3600 / interval)
     for sym in symbols:
         deriv = await fetch_derivs(sym)
@@ -72,6 +124,15 @@ async def _refresh_once() -> Dict[str, Any]:
         except Exception:
             pass
         append_deriv_history(sym, deriv, BASE_DIR / "data", max_points=max_points)
+
+    # fetch and persist current spot prices
+    price_tasks = [fetch_price(s) for s in symbols]
+    prices = await asyncio.gather(*price_tasks)
+    for sym, price in zip(symbols, prices):
+        try:
+            db_save_price(sym, ts, price)
+        except Exception:
+            pass
     return snapshot
 
 
@@ -111,7 +172,7 @@ async def _maybe_backfill_24h() -> None:
 
     Uses Binance endpoints via derivatives.backfill_24h. Runs once at startup.
     """
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XLMUSDT", "XRPUSDT", "AAVEUSDT"]
+    symbols = _symbols()
     for s in symbols:
         path = BASE_DIR / "data" / f"derivs_{s}.json"
         needs = True
@@ -174,13 +235,10 @@ def index() -> str:
         "  <div id='derivs-wrap' style='display:grid;grid-template-columns:140px 1fr 1fr 1fr;gap:10px;align-items:start'></div>\n"
         "</div>\n"
         "<div id='tab-orders' style='display:none'>\n"
-        "  <div style='display:flex;flex-direction:column;gap:10px;margin-top:10px'>\n"
-        "    <div><h3>BTCUSDT Bids/Asks</h3><div id='orders-btc' style='width:800px;height:200px;border:1px solid #ccc'></div></div>\n"
-        "    <div><h3>ETHUSDT Bids/Asks</h3><div id='orders-eth' style='width:800px;height:200px;border:1px solid #ccc'></div></div>\n"
-        "  </div>\n"
+        "  <div id='orders-wrap' style='display:flex;flex-direction:column;gap:10px;margin-top:10px'></div>\n"
         "</div>\n"
         "<script>\n"
-        "const derivSyms=['BTCUSDT','ETHUSDT','SOLUSDT','XLMUSDT','XRPUSDT','AAVEUSDT'];\n"
+        f"const derivSyms={json.dumps(_symbols())};\n"
         "function showTab(tab,btn){\n"
         "  document.getElementById('tab-holdings').style.display = (tab==='holdings')?'block':'none';\n"
         "  document.getElementById('tab-predict').style.display  = (tab==='predict')?'block':'none';\n"
@@ -211,7 +269,7 @@ def index() -> str:
         "    });\n"
         "  }\n"
         "  for(let s of derivSyms){\n"
-        "    let d=await fetch(`/chart/derivs?symbol=${s}`).then(r=>r.json());\n"
+        "    let d=await fetch(`/chart/derivs?symbol=${s}&window=24h`).then(r=>r.json());\n"
         "    let x=toCN(d.timestamps);\n"
         "    let f=(d.funding||[]).map(v=>Number(v)*100);\n"
         "    let b=(d.basis||[]).map(v=>Number(v));\n"
@@ -229,12 +287,15 @@ def index() -> str:
         "    mk(`derivs-${s.toLowerCase()}-basis`,'Basis (USD)',b,(v)=>'$'+Number(v).toFixed(2), '#EE6666');\n"
         "    mk(`derivs-${s.toLowerCase()}-oi`,'Open Interest',o,(v)=>Number(v).toLocaleString(), '#91CC75');\n"
         "  }\n"
-        "  let ob_btc = await fetch('/chart/orders?symbol=BTCUSDT').then(r=>r.json());\n"
-        "  let ob_eth = await fetch('/chart/orders?symbol=ETHUSDT').then(r=>r.json());\n"
-        "  let obBtcChart = echarts.init(document.getElementById('orders-btc'));\n"
-        "  obBtcChart.setOption({xAxis:{type:'category',data:['buy','sell']},yAxis:{type:'value'},series:[{data:[ob_btc.buy,ob_btc.sell],type:'bar'}]});\n"
-        "  let obEthChart = echarts.init(document.getElementById('orders-eth'));\n"
-        "  obEthChart.setOption({xAxis:{type:'category',data:['buy','sell']},yAxis:{type:'value'},series:[{data:[ob_eth.buy,ob_eth.sell],type:'bar'}]});\n"
+        "  let ordersWrap=document.getElementById('orders-wrap');\n"
+        "  if(!ordersWrap.hasChildNodes()){\n"
+        "    derivSyms.forEach(s=>{let box=document.createElement('div');box.innerHTML=`<h3>${s} Bids/Asks</h3><div id='orders-${s.toLowerCase()}' style='width:800px;height:200px;border:1px solid #ccc'></div>`;ordersWrap.appendChild(box);});\n"
+        "  }\n"
+        "  for(let s of derivSyms){\n"
+        "    let ob=await fetch(`/chart/orders?symbol=${s}`).then(r=>r.json());\n"
+        "    let chart=echarts.init(document.getElementById(`orders-${s.toLowerCase()}`));\n"
+        "    chart.setOption({xAxis:{type:'category',data:['buy','sell']},yAxis:{type:'value'},series:[{data:[ob.buy,ob.sell],type:'bar'}]});\n"
+        "  }\n"
         "}\n"
         "setInterval(load,5000);\nload();\n</script>\n"
         "</body>\n"
@@ -382,7 +443,7 @@ async def backfill_derivs() -> Dict[str, Any]:
 
     Returns a map of symbol->inserted points.
     """
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XLMUSDT", "XRPUSDT", "AAVEUSDT"]
+    symbols = _symbols()
     results: Dict[str, int] = {}
     for s in symbols:
         try:
