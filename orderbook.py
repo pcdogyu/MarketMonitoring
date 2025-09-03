@@ -67,6 +67,31 @@ async def _okx(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[float
         return [], []
 
 
+async def _mark_price(symbol: str) -> float:
+    """Return Binance mark price for ``symbol`` from futures premium index API.
+
+    Tries the USDT-margined (``fapi``) endpoint first and falls back to the
+    coin-margined (``dapi``) endpoint.  Returns ``0.0`` if neither succeeds.
+    """
+
+    endpoints = [
+        "https://fapi.binance.com/fapi/v1/premiumIndex",
+        "https://dapi.binance.com/dapi/v1/premiumIndex",
+    ]
+    for url in endpoints:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(url, params={"symbol": symbol})
+                resp.raise_for_status()
+                data = resp.json()
+                price = float(data.get("markPrice", 0.0))
+                if price:
+                    return price
+        except Exception:
+            continue
+    return 0.0
+
+
 async def fetch(symbol: str) -> Dict[str, Any]:
     """Aggregate open orders across Binance, Bybit and OKX into price buckets.
 
@@ -119,7 +144,8 @@ async def fetch(symbol: str) -> Dict[str, Any]:
 
     # Round prices to the desired precision for output and current price
     prices = [round(p, decimals) for p in prices]
-    price = round(mid, decimals)
+    mark = await _mark_price(symbol)
+    price = round(mark if mark else mid, decimals)
 
     # Ensure the current price exists in the axis to draw mark line
     if price not in prices:
