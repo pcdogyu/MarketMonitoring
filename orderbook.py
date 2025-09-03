@@ -118,5 +118,18 @@ async def fetch(symbol: str) -> Dict[str, Any]:
     prices = sorted(buckets.keys())
     buy = [buckets[p]["buy"] for p in prices]
     sell = [buckets[p]["sell"] for p in prices]
+
+    # Round prices to the desired precision for output and current price
     prices = [round(p, decimals) for p in prices]
-    return {"symbol": symbol, "prices": prices, "buy": buy, "sell": sell}
+    price = round(mid, decimals)
+
+    # Ensure the current price exists in the axis to draw mark line
+    if price not in prices:
+        idx = 0
+        while idx < len(prices) and prices[idx] < price:
+            idx += 1
+        prices.insert(idx, price)
+        buy.insert(idx, 0.0)
+        sell.insert(idx, 0.0)
+
+    return {"symbol": symbol, "price": price, "prices": prices, "buy": buy, "sell": sell}
