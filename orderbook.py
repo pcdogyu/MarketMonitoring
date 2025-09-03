@@ -87,7 +87,9 @@ async def fetch(symbol: str) -> Dict[str, Any]:
         mid = asks0[0][0]
     else:
         mid = 1.0
-    interval = max(mid * 0.0001, 0.01)
+    exp = math.floor(math.log10(mid)) if mid > 0 else 0
+    decimals = max(2, 2 - exp)
+    interval = max(mid * 0.0001, 10 ** (-decimals))
 
     from collections import defaultdict
     buckets: Dict[float, Dict[str, float]] = defaultdict(lambda: {"buy": 0.0, "sell": 0.0})
@@ -101,7 +103,7 @@ async def fetch(symbol: str) -> Dict[str, Any]:
             buckets[bucket]["sell"] += qty
 
     prices = sorted(buckets.keys())
-    prices = [round(p, 2) for p in prices]
     buy = [buckets[p]["buy"] for p in prices]
     sell = [buckets[p]["sell"] for p in prices]
+    prices = [round(p, decimals) for p in prices]
     return {"symbol": symbol, "prices": prices, "buy": buy, "sell": sell}
