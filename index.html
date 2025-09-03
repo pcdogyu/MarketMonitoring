@@ -156,7 +156,18 @@ async function load(){
     let ob=await fetch(`/chart/orders?symbol=${currentSym}`).then(r=>r.json());
     let chart=echarts.init(document.getElementById('orders-chart'));
     let dec=sym4.includes(currentSym)?4:2;
-    chart.setOption({tooltip:{},legend:{data:['buy','sell']},xAxis:{type:'category',data:ob.prices.map(p=>Number(p).toFixed(dec))},yAxis:{type:'value'},series:[{name:'buy',data:ob.buy,type:'bar'},{name:'sell',data:ob.sell,type:'bar'}]});
+    let priceStr=Number(ob.price).toFixed(dec);
+    chart.setOption({
+      tooltip:{},
+      legend:{data:['buy','sell']},
+      grid:{left:0,right:0,containLabel:true},
+      xAxis:{type:'category',data:ob.prices.map(p=>Number(p).toFixed(dec)),boundaryGap:false},
+      yAxis:{type:'value'},
+      series:[
+        {name:'buy',data:ob.buy,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
+        {name:'sell',data:ob.sell,type:'bar'}
+      ]
+    });
   }else if(currentTab==='trades'){
     let wrap=document.getElementById('trades-wrap');
     if(!wrap.hasChildNodes()){
