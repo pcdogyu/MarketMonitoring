@@ -294,7 +294,7 @@ def index() -> str:
         "  for(let s of derivSyms){\n"
         "    let ob=await fetch(`/chart/orders?symbol=${s}`).then(r=>r.json());\n"
         "    let chart=echarts.init(document.getElementById(`orders-${s.toLowerCase()}`));\n"
-        "    chart.setOption({xAxis:{type:'category',data:['buy','sell']},yAxis:{type:'value'},series:[{data:[ob.buy,ob.sell],type:'bar'}]});\n"
+        "    chart.setOption({tooltip:{},legend:{data:['buy','sell']},xAxis:{type:'category',data:ob.prices.map(p=>p.toString())},yAxis:{type:'value'},series:[{name:'buy',data:ob.buy,type:'bar'},{name:'sell',data:ob.sell,type:'bar'}]});\n"
         "  }\n"
         "}\n"
         "setInterval(load,5000);\nload();\n</script>\n"
@@ -465,14 +465,11 @@ async def backfill_derivs() -> Dict[str, Any]:
 
 @app.get("/chart/orders")
 async def chart_orders(symbol: str) -> Dict[str, Any]:
-    """Return aggregated open buy/sell volumes for ``symbol``.
+    """Return aggregated open orders for ``symbol`` binned by price.
 
-    The returned payload includes the ``symbol`` itself along with ``buy`` and
-    ``sell`` volume totals.  The previous type hint of ``Dict[str, float]``
-    implied that *all* values would be floats which caused Pydantic's response
-    validation to fail because ``symbol`` is a string.  Using ``Dict[str, Any]``
-    accurately reflects the response shape and prevents a runtime validation
-    error.
+    The response contains ``symbol`` together with arrays ``prices``, ``buy``
+    and ``sell`` representing the total bid/ask quantities at each price
+    bucket.  ``Dict[str, Any]`` is used because the values are heterogeneous.
     """
 
     from orderbook import fetch

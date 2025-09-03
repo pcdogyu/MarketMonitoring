@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Tuple, Dict, Any
+import math
+from typing import Tuple, Dict, Any, List
 
 import httpx
 
 
-async def _binance(symbol: str) -> Tuple[float, float]:
-    """Return summed (bids, asks) from Binance futures orderbook."""
+async def _binance(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
+    """Return (bids, asks) lists from Binance futures orderbook."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
@@ -18,15 +19,15 @@ async def _binance(symbol: str) -> Tuple[float, float]:
             )
             resp.raise_for_status()
             book = resp.json()
-            bids = sum(float(b[1]) for b in book.get("bids", []))
-            asks = sum(float(a[1]) for a in book.get("asks", []))
+            bids = [(float(b[0]), float(b[1])) for b in book.get("bids", [])]
+            asks = [(float(a[0]), float(a[1])) for a in book.get("asks", [])]
             return bids, asks
     except Exception:
-        return 0.0, 0.0
+        return [], []
 
 
-async def _bybit(symbol: str) -> Tuple[float, float]:
-    """Return summed (bids, asks) from Bybit linear swaps orderbook."""
+async def _bybit(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
+    """Return (bids, asks) lists from Bybit linear swaps orderbook."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
@@ -36,17 +37,17 @@ async def _bybit(symbol: str) -> Tuple[float, float]:
             resp.raise_for_status()
             data = resp.json().get("result", {}).get("list", [])
             if not data:
-                return 0.0, 0.0
+                return [], []
             item = data[0]
-            bids = sum(float(b[1]) for b in item.get("b", []))
-            asks = sum(float(a[1]) for a in item.get("a", []))
+            bids = [(float(b[0]), float(b[1])) for b in item.get("b", [])]
+            asks = [(float(a[0]), float(a[1])) for a in item.get("a", [])]
             return bids, asks
     except Exception:
-        return 0.0, 0.0
+        return [], []
 
 
-async def _okx(symbol: str) -> Tuple[float, float]:
-    """Return summed (bids, asks) from OKX swaps orderbook."""
+async def _okx(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
+    """Return (bids, asks) lists from OKX swaps orderbook."""
     inst = symbol.replace("USDT", "-USDT") + "-SWAP"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -57,24 +58,54 @@ async def _okx(symbol: str) -> Tuple[float, float]:
             resp.raise_for_status()
             data = resp.json().get("data", [])
             if not data:
-                return 0.0, 0.0
+                return [], []
             book = data[0]
-            bids = sum(float(b[1]) for b in book.get("bids", []))
-            asks = sum(float(a[1]) for a in book.get("asks", []))
+            bids = [(float(b[0]), float(b[1])) for b in book.get("bids", [])]
+            asks = [(float(a[0]), float(a[1])) for a in book.get("asks", [])]
             return bids, asks
     except Exception:
-        return 0.0, 0.0
+        return [], []
 
 
 async def fetch(symbol: str) -> Dict[str, Any]:
-    """Aggregate open buy/sell volumes across Binance, Bybit and OKX.
+    """Aggregate open orders across Binance, Bybit and OKX into price buckets.
 
-    The returned mapping includes the ``symbol`` string alongside the numeric
-    ``buy`` and ``sell`` volume totals.  Using ``Dict[str, Any]`` accurately
-    represents this shape and prevents type checkers or FastAPI's response
-    validation from assuming all values are floats.
+    Returns mapping ``{symbol, prices, buy, sell}`` where ``prices`` is a
+    sorted list of price bucket levels and ``buy``/``sell`` are corresponding
+    accumulated quantities.
     """
-    results = await asyncio.gather(_binance(symbol), _bybit(symbol), _okx(symbol))
-    buy = sum(r[0] for r in results)
-    sell = sum(r[1] for r in results)
-    return {"symbol": symbol, "buy": buy, "sell": sell}
+    books = await asyncio.gather(_binance(symbol), _bybit(symbol), _okx(symbol))
+
+    # Determine interval based on symbol
+    if symbol == "BTCUSDT":
+        interval = 50.0
+    elif symbol == "ETHUSDT":
+        interval = 20.0
+    else:
+        # Use mid price from first book as base for 1% buckets
+        bids0, asks0 = books[0]
+        if bids0 and asks0:
+            mid = (bids0[0][0] + asks0[0][0]) / 2
+        elif bids0:
+            mid = bids0[0][0]
+        elif asks0:
+            mid = asks0[0][0]
+        else:
+            mid = 1.0
+        interval = mid * 0.01
+
+    from collections import defaultdict
+    buckets: Dict[float, Dict[str, float]] = defaultdict(lambda: {"buy": 0.0, "sell": 0.0})
+
+    for bids, asks in books:
+        for price, qty in bids:
+            bucket = interval * math.floor(price / interval)
+            buckets[bucket]["buy"] += qty
+        for price, qty in asks:
+            bucket = interval * math.floor(price / interval)
+            buckets[bucket]["sell"] += qty
+
+    prices = sorted(buckets.keys())
+    buy = [buckets[p]["buy"] for p in prices]
+    sell = [buckets[p]["sell"] for p in prices]
+    return {"symbol": symbol, "prices": prices, "buy": buy, "sell": sell}
