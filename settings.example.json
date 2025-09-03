@@ -25,6 +25,24 @@
     "addresses": [],
     "clusters": []
   },
+  "exchanges": {
+    "binance": {
+      "api_key": "YOUR_BINANCE_KEY",
+      "secret": "YOUR_BINANCE_SECRET",
+      "api_base": "https://api.binance.com"
+    },
+    "bybit": {
+      "api_key": "YOUR_BYBIT_KEY",
+      "secret": "YOUR_BYBIT_SECRET",
+      "api_base": "https://api.bybit.com"
+    },
+    "okx": {
+      "api_key": "YOUR_OKX_KEY",
+      "secret": "YOUR_OKX_SECRET",
+      "passphrase": "YOUR_OKX_PASSPHRASE",
+      "api_base": "https://www.okx.com"
+    }
+  },
   "symbols": [
     "BTCUSDT",
     "ETHUSDT",
