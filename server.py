@@ -29,6 +29,7 @@ from db import (
     save_holdings as db_save_holdings,
     query_derivs as db_query_derivs,
     save_price as db_save_price,
+    save_cex_holdings as db_save_cex_holdings,
 )
 from holdings import refresh_holdings
 from exchange_holdings import refresh_exchange_holdings
@@ -128,6 +129,10 @@ async def _refresh_once() -> Dict[str, Any]:
     try:
         global LAST_CEX_SNAPSHOT
         LAST_CEX_SNAPSHOT = await refresh_exchange_holdings(str(_settings_path()))
+        try:
+            db_save_cex_holdings(LAST_CEX_SNAPSHOT)
+        except Exception:
+            pass
     except Exception:
         LAST_CEX_SNAPSHOT = {"time": ts, "exchanges": {}}
     cfg = json.loads(_settings_path().read_text())
