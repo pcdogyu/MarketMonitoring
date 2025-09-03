@@ -13,6 +13,7 @@
   - Tab2: 预测信号 (BTCUSDT, ETHUSDT)
   - Tab3: 衍生品 Funding / Basis / OI 曲线（**BTCUSDT & ETHUSDT 并排展示**）
   - Tab4: 三大交易所挂单统计（BTCUSDT & ETHUSDT）
+  - Tab5: 取消订单统计（每个币对取消订单数）
   - 页面右上角提供“设置”按钮，可编辑 API 及监控币对信息
 
 ## 使用方法

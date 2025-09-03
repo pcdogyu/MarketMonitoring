@@ -14,6 +14,7 @@
   <button class='menu top' onclick="showTab('derivs',this)">衍生品</button>
   <button class='menu top' onclick="showTab('orders',this)">挂单</button>
   <button class='menu top' onclick="showTab('trades',this)">成交</button>
+  <button class='menu top' onclick="showTab('cancels',this)">取消</button>
   <button class='menu top' onclick="showTab('settings',this)">设置</button>
 </div>
 <div id='sym-menu' style='display:none;gap:8px;flex-wrap:wrap;margin-top:8px'></div>
@@ -33,6 +34,9 @@
 </div>
 <div id='tab-trades' style='display:none'>
   <div id='trades-wrap' style='margin-top:10px;width:100%'></div>
+</div>
+<div id='tab-cancels' style='display:none'>
+  <div id='cancels-wrap' style='margin-top:10px;width:100%'></div>
 </div>
 <div id='tab-settings' style='display:none'>
   <h3>系统设置</h3>
@@ -75,6 +79,7 @@ function showSym(sym,btn){
   if(currentTab==='derivs') document.getElementById('derivs-wrap').innerHTML='';
   if(currentTab==='orders') document.getElementById('orders-wrap').innerHTML='';
   if(currentTab==='trades') document.getElementById('trades-wrap').innerHTML='';
+  if(currentTab==='cancels') document.getElementById('cancels-wrap').innerHTML='';
   load();
 }
 function showTab(tab,btn){
@@ -84,10 +89,11 @@ function showTab(tab,btn){
   document.getElementById('tab-derivs').style.display=(tab==='derivs')?'block':'none';
   document.getElementById('tab-orders').style.display=(tab==='orders')?'block':'none';
   document.getElementById('tab-trades').style.display=(tab==='trades')?'block':'none';
+  document.getElementById('tab-cancels').style.display=(tab==='cancels')?'block':'none';
   document.getElementById('tab-settings').style.display=(tab==='settings')?'block':'none';
   document.querySelectorAll('.menu.top').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  const needsSym=['derivs','orders','trades'].includes(tab);
+  const needsSym=['derivs','orders','trades','cancels'].includes(tab);
   symMenu.style.display=needsSym?'flex':'none';
   if(needsSym) initSymMenu();
   if(tab==='settings') loadSettings();
@@ -200,6 +206,15 @@ async function load(){
         {type:'bar',data:td.volumes,yAxisIndex:1,barWidth:'60%',itemStyle:{color:'#91CC75'}},
       ]
     });
+  }else if(currentTab==='cancels'){
+    let wrap=document.getElementById('cancels-wrap');
+    if(!wrap.hasChildNodes()){
+      wrap.innerHTML=`<h3>${currentSym}</h3><div id='cancels-count' style='font-size:24px;margin-top:10px'></div>`;
+    }else{
+      wrap.querySelector('h3').textContent=currentSym;
+    }
+    let d=await fetch(`/chart/cancels?symbol=${currentSym}`).then(r=>r.json());
+    document.getElementById('cancels-count').textContent='取消数量: '+d.count;
   }
 }
 setInterval(load,5000);load();
