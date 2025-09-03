@@ -38,8 +38,20 @@ def init_db() -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cex_holdings (
+              ts TEXT NOT NULL,
+              exchange TEXT NOT NULL,
+              BTC REAL, ETH REAL, USDT REAL, USD REAL, USDC REAL
+            )
+            """
+        )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_derivs_sym_ts ON derivs(symbol, ts)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_prices_sym_ts ON prices(symbol, ts)")
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cex_holdings_ts_ex ON cex_holdings(ts, exchange)"
+        )
         con.commit()
 
 
@@ -76,6 +88,28 @@ def save_price(symbol: str, ts: str, price: float) -> None:
             "INSERT INTO prices(symbol,ts,price) VALUES (?,?,?)",
             (symbol, ts, float(price)),
         )
+        con.commit()
+
+
+def save_cex_holdings(snapshot: Dict[str, Any]) -> None:
+    """Persist centralised exchange holdings snapshot into SQLite."""
+
+    ts: str = snapshot.get("time")
+    exchanges: Dict[str, Any] = snapshot.get("exchanges", {})
+    with sqlite3.connect(DB_PATH) as con:
+        for ex, bal in exchanges.items():
+            con.execute(
+                "INSERT INTO cex_holdings(ts,exchange,BTC,ETH,USDT,USD,USDC) VALUES (?,?,?,?,?,?,?)",
+                (
+                    ts,
+                    ex,
+                    float(bal.get("BTC", 0)),
+                    float(bal.get("ETH", 0)),
+                    float(bal.get("USDT", 0)),
+                    float(bal.get("USD", 0)),
+                    float(bal.get("USDC", 0)),
+                ),
+            )
         con.commit()
 
 
