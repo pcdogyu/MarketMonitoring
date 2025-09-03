@@ -481,7 +481,15 @@ async def chart_trades(symbol: str) -> Dict[str, Any]:
                 break
         lower = l if l is not None else pairs[0][0]
         upper = u if u is not None else pairs[-1][0]
-    return {"symbol": sym, "times": times, "prices": closes, "lower": lower, "upper": upper}
+
+    return {
+        "symbol": sym,
+        "times": times,
+        "prices": closes,
+        "volumes": volumes,
+        "lower": lower,
+        "upper": upper,
+    }
 
 
 @app.post("/labels/import")
