@@ -279,7 +279,7 @@ def index() -> str:
         "  let pred1 = await fetch('/predict/BTCUSDT').then(r=>r.json());\n"
         "  let pred2 = await fetch('/predict/ETHUSDT').then(r=>r.json());\n"
         "  document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><p style=\"color:#555;font-size:14px\">数据来源: data/holdings_history.json, 信号计算为 ΔBTC/ETH - 0.8·ΔUSDT - 0.4·ΔUSDC</p><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';\n"
-        "  const toCN = (arr)=>{return (arr||[]).map(t=>{try{let d=new Date(t);if(!isNaN(d)){d=new Date(d.getTime()+8*3600*1000);let m=(d.getUTCMonth()+1).toString().padStart(2,'0');let day=d.getUTCDate().toString().padStart(2,'0');let hh=d.getUTCHours().toString().padStart(2,'0');let mm=d.getUTCMinutes().toString().padStart(2,'0');return `${m}-${day} ${hh}:${mm}`;} }catch(e){} return t;});};\n"
+        "  const toUTC8 = (arr)=>{return (arr||[]).map(t=>{try{let d=new Date(t);if(!isNaN(d)){d=new Date(d.getTime()+8*3600*1000);let m=(d.getUTCMonth()+1).toString().padStart(2,'0');let day=d.getUTCDate().toString().padStart(2,'0');let hh=d.getUTCHours().toString().padStart(2,'0');let mm=d.getUTCMinutes().toString().padStart(2,'0');return `${m}-${day} ${hh}:${mm}`;} }catch(e){} return t;});};\n"
         "  let wrap=document.getElementById('derivs-wrap');\n"
         "  if(!wrap.hasChildNodes()){\n"
         "    // header row\n"
@@ -291,8 +291,8 @@ def index() -> str:
         "    });\n"
         "  }\n"
         "  for(let s of derivSyms){\n"
-        "    let d=await fetch(`/chart/derivs?symbol=${s}&window=24h`).then(r=>r.json());\n"
-        "    let x=toCN(d.timestamps);\n"
+        "    let d=await fetch(`/chart/derivs?symbol=${s}`).then(r=>r.json());\n"
+        "    let x=toUTC8(d.timestamps);\n"
         "    let f=(d.funding||[]).map(v=>Number(v)*100);\n"
         "    let b=(d.basis||[]).map(v=>Number(v));\n"
         "    let o=(d.oi||[]).map(v=>Number(v));\n"
@@ -413,12 +413,13 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
     """Return derivatives history for ``symbol``.
 
     Optional query ``window`` restricts the time range (e.g. "5m", "1h").
-    The server prefers SQLite when available, falling back to JSON history.
+    If omitted, the server returns the last 24 hours.  The server prefers
+    SQLite when available, falling back to JSON history.
     """
 
-    def _parse_window(w: str | None) -> int | None:
+    def _parse_window(w: str | None) -> int:
         if not w:
-            return None
+            return 24 * 3600
         try:
             unit = w[-1].lower()
             num = int(w[:-1])
@@ -429,8 +430,8 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
             if unit == "d":
                 return num * 86400
         except Exception:
-            return None
-        return None
+            pass
+        return 24 * 3600
 
     secs = _parse_window(window)
 
@@ -446,8 +447,6 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
     path = BASE_DIR / "data" / f"derivs_{symbol.upper()}.json"
     try:
         data = json.loads(path.read_text())
-        if secs is None:
-            return data
         # cut by seconds based on timestamps
         import time
 
