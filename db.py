@@ -170,3 +170,17 @@ def _cutoff_iso(since_seconds: int) -> str:
     t = int(time.time()) - max(0, since_seconds)
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
 
+
+def prune_old_data(days: int = 14) -> None:
+    """Delete rows older than ``days`` from all tables."""
+
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
+    with sqlite3.connect(DB_PATH) as con:
+        cur = con.cursor()
+        for table in ("holdings", "derivs", "prices", "cex_holdings"):
+            cur.execute(f"DELETE FROM {table} WHERE ts < ?", (cutoff_str,))
+        con.commit()
+
