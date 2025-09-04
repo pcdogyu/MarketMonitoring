@@ -77,6 +77,7 @@ let currentDepth=100;
 const depthButtons=document.getElementById('depth-buttons');
 const vaPercents=[0.7,0.75,0.8,0.85];
 let currentVA=0.7;
+let latestPrice=0;
 function initSymMenu(){
   if(symMenu.hasChildNodes()) return;
   derivSyms.forEach((s,i)=>{
@@ -122,7 +123,7 @@ function initVAButtons(){
     btns.appendChild(b);
   });
 }
-function showSym(sym,btn){
+async function showSym(sym,btn){
   currentSym=sym;
   symMenu.querySelectorAll('.menu').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
@@ -130,6 +131,7 @@ function showSym(sym,btn){
   if(currentTab==='orders') document.getElementById('orders-wrap').innerHTML='';
   if(currentTab==='trades') document.getElementById('trades-wrap').innerHTML='';
   if(currentTab==='cancels') document.getElementById('cancels-wrap').innerHTML='';
+  await refreshPrice();
   load();
 }
 function showTab(tab,btn){
@@ -176,6 +178,14 @@ function toUTC8(arr){
     }catch(e){}
     return t;
   });
+}
+async function refreshPrice(){
+  try{
+    const data=await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${currentSym}`).then(r=>r.json());
+    latestPrice=Number(data.price)||0;
+  }catch(e){
+    console.error('Failed to fetch latest price',e);
+  }
 }
 async function load(){
   if(currentTab==='holdings'){
@@ -267,7 +277,7 @@ async function load(){
     let td=await fetch(`/chart/trades?symbol=${currentSym}`).then(r=>r.json());
     const prices=td.prices.map(Number);
     const vols=td.volumes.map(Number);
-    const curPrice=Number(td.price)||0;
+    const curPrice=latestPrice;
     const binCount=35;
     let tc=echarts.init(document.getElementById('trades-chart'));
     if(prices.length){
@@ -353,7 +363,9 @@ async function load(){
     chart.setOption({tooltip:{trigger:'axis'},xAxis:{type:'category',data:x},yAxis:{type:'value'},dataZoom:[{type:'inside'}],series:[{data:d.counts,type:'line'}]});
   }
 }
-setInterval(load,5000);load();
+setInterval(load,5000);
+setInterval(refreshPrice,30000);
+refreshPrice().then(load);
 
 async function triggerBackfill(hours,btn){
   const note=document.getElementById('backfill-note');
