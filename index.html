@@ -159,7 +159,8 @@ async function load(){
     const toSeries=(arr,fn=v=>v)=>{
       return (arr||[]).map(v=>{
         const num=Number(v);
-        return (!v||num===0)?null:fn(num);
+        // Treat missing, zero, or non-numeric values as gaps so lines connect
+        return (!v||Number.isNaN(num)||num===0)?null:fn(num);
       });
     };
     let p=toSeries(d.price);
