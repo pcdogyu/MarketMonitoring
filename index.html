@@ -183,6 +183,9 @@ async function refreshPrice(){
   try{
     const data=await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${currentSym}`).then(r=>r.json());
     latestPrice=Number(data.price)||0;
+    if(currentTab==='trades'){
+      load();
+    }
   }catch(e){
     console.error('Failed to fetch latest price',e);
   }
@@ -382,7 +385,7 @@ async function load(){
   }
 }
 setInterval(load,5000);
-setInterval(refreshPrice,30000);
+setInterval(refreshPrice,60000);
 refreshPrice().then(load);
 
 async function triggerBackfill(hours,btn){
