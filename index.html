@@ -230,20 +230,60 @@ async function load(){
   }else if(currentTab==='trades'){
     let wrap=document.getElementById('trades-wrap');
     if(!wrap.hasChildNodes()){
-      wrap.innerHTML=`<h3>${currentSym}</h3><div id='trades-chart' style='width:800px;height:320px;border:1px solid #ccc'></div>`;
+      wrap.innerHTML=`<h3>${currentSym}</h3><div id='trades-chart' style='width:100%;height:80vh;border:1px solid #ccc'></div>`;
     }else{
       wrap.querySelector('h3').textContent=currentSym;
     }
     let td=await fetch(`/chart/trades?symbol=${currentSym}`).then(r=>r.json());
     let dec=symDecimals[currentSym]??2;
+    const prices=td.prices.map(Number);
+    const vols=td.volumes.map(Number);
+    const binCount=35;
     let tc=echarts.init(document.getElementById('trades-chart'));
-    tc.setOption({
-      tooltip:{formatter:p=>`${Number(p.name).toFixed(dec)}: ${Number(p.value).toLocaleString()}`},
-      grid:{left:60,right:20,top:20,bottom:20},
-      xAxis:{type:'value'},
-      yAxis:{type:'category',data:td.prices.map(p=>Number(p).toFixed(dec))},
-      series:[{type:'bar',data:td.volumes,barWidth:'60%',itemStyle:{color:'#91CC75'}}]
-    });
+    if(prices.length){
+      const minP=Math.min(...prices);
+      const maxP=Math.max(...prices);
+      const binSize=(maxP-minP)/binCount||1;
+      const binVolumes=new Array(binCount).fill(0);
+      prices.forEach((p,i)=>{
+        let idx=Math.floor((p-minP)/binSize);
+        if(idx===binCount) idx=binCount-1;
+        binVolumes[idx]+=vols[i];
+      });
+      const binLabels=[];
+      for(let i=0;i<binCount;i++){
+        const start=minP+i*binSize;
+        const end=start+binSize;
+        binLabels.push(`${start.toFixed(dec)}-${end.toFixed(dec)}`);
+      }
+      const totalVol=binVolumes.reduce((a,b)=>a+b,0);
+      const order=[...binVolumes.keys()].sort((a,b)=>binVolumes[b]-binVolumes[a]);
+      const topBins=new Set(order.slice(0,3));
+      const valueArea=new Set();
+      let acc=0;
+      for(const idx of order){
+        if(acc/totalVol>=0.7) break;
+        valueArea.add(idx);
+        acc+=binVolumes[idx];
+      }
+      const colors=binVolumes.map((_,i)=>{
+        if(topBins.has(i)) return 'purple';
+        if(valueArea.has(i)) return 'blue';
+        return '#91CC75';
+      });
+      const displayVols=binVolumes.slice().reverse();
+      const displayLabels=binLabels.slice().reverse();
+      const displayColors=colors.slice().reverse();
+      tc.setOption({
+        tooltip:{formatter:p=>`${p.name}: ${Number(p.value).toLocaleString()}`},
+        grid:{left:60,right:20,top:20,bottom:20},
+        xAxis:{type:'value'},
+        yAxis:{type:'category',data:displayLabels},
+        series:[{type:'bar',data:displayVols,barWidth:'60%',itemStyle:{color:(p)=>displayColors[p.dataIndex]}}]
+      });
+    }else{
+      tc.clear();
+    }
   }else if(currentTab==='cancels'){
     let wrap=document.getElementById('cancels-wrap');
     if(!wrap.hasChildNodes()){
