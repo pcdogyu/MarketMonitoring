@@ -620,8 +620,11 @@ async def backfill_derivs(hours: int = 24) -> Dict[str, Any]:
 
 
 @app.get("/chart/orders")
-async def chart_orders(symbol: str) -> Dict[str, Any]:
+async def chart_orders(symbol: str, limit: int = 100) -> Dict[str, Any]:
     """Return aggregated open orders for ``symbol`` binned by price.
+
+    ``limit`` specifies how many order book levels to request from each
+    exchange and determines the depth shown around the current price.
 
     The response contains ``symbol`` together with arrays ``prices``, ``buy``
     and ``sell`` representing the total bid/ask quantities at each price
@@ -630,7 +633,7 @@ async def chart_orders(symbol: str) -> Dict[str, Any]:
 
     from orderbook import fetch
 
-    return await fetch(symbol.upper())
+    return await fetch(symbol.upper(), limit)
 
 
 @app.get("/chart/cancels")

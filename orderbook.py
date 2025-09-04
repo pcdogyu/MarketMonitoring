@@ -9,13 +9,13 @@ from typing import Tuple, Dict, Any, List
 import httpx
 
 
-async def _binance(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
-    """Return (bids, asks) lists from Binance futures orderbook."""
+async def _binance(symbol: str, limit: int = 100) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
+    """Return (bids, asks) lists from Binance spot orderbook."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
-                "https://fapi.binance.com/fapi/v1/depth",
-                params={"symbol": symbol, "limit": 100},
+                "https://api.binance.com/api/v3/depth",
+                params={"symbol": symbol, "limit": limit},
             )
             resp.raise_for_status()
             book = resp.json()
@@ -26,13 +26,13 @@ async def _binance(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[f
         return [], []
 
 
-async def _bybit(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
+async def _bybit(symbol: str, limit: int = 100) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
     """Return (bids, asks) lists from Bybit linear swaps orderbook."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 "https://api.bybit.com/v5/market/orderbook",
-                params={"category": "linear", "symbol": symbol, "limit": 100},
+                params={"category": "linear", "symbol": symbol, "limit": min(limit, 200)},
             )
             resp.raise_for_status()
             data = resp.json().get("result", {}).get("list", [])
@@ -46,14 +46,14 @@ async def _bybit(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[flo
         return [], []
 
 
-async def _okx(symbol: str) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
+async def _okx(symbol: str, limit: int = 100) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
     """Return (bids, asks) lists from OKX swaps orderbook."""
     inst = symbol.replace("USDT", "-USDT") + "-SWAP"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 "https://www.okx.com/api/v5/market/books",
-                params={"instId": inst, "sz": 100},
+                params={"instId": inst, "sz": min(limit, 200)},
             )
             resp.raise_for_status()
             data = resp.json().get("data", [])
@@ -92,14 +92,19 @@ async def _mark_price(symbol: str) -> float:
     return 0.0
 
 
-async def fetch(symbol: str) -> Dict[str, Any]:
+async def fetch(symbol: str, limit: int = 100) -> Dict[str, Any]:
     """Aggregate open orders across Binance, Bybit and OKX into price buckets.
+
+    ``limit`` controls how many levels to request from upstream exchanges and
+    how far to extend the price axis around the current price.
 
     Returns mapping ``{symbol, prices, buy, sell}`` where ``prices`` is a
     sorted list of price bucket levels and ``buy``/``sell`` are corresponding
     accumulated quantities.
     """
-    books = await asyncio.gather(_binance(symbol), _bybit(symbol), _okx(symbol))
+    books = await asyncio.gather(
+        _binance(symbol, limit), _bybit(symbol, limit), _okx(symbol, limit)
+    )
 
     # Determine interval based on symbol using SOLUSDT-style precision
     # Use mid price from first book as base for 0.01% buckets
@@ -157,7 +162,7 @@ async def fetch(symbol: str) -> Dict[str, Any]:
         sell.insert(idx, 0.0)
 
     # Extend price levels to show deeper depth around current price
-    depth = 100
+    depth = limit
     lower_bound = round(price - depth * interval, decimals)
     upper_bound = round(price + depth * interval, decimals)
 

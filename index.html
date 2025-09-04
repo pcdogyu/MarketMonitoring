@@ -40,6 +40,7 @@
   <div id='backfill-note' style='color:#888;font-size:12px;margin-top:4px'></div>
 </div>
 <div id='tab-orders' style='display:none'>
+  <div id='depth-buttons' style='margin-top:10px;display:flex;gap:4px'></div>
   <div id='orders-wrap' style='margin-top:10px;width:100%'></div>
 </div>
 <div id='tab-trades' style='display:none'>
@@ -71,6 +72,9 @@ const symDecimals={
 let currentSym=derivSyms[0];
 let currentTab='holdings';
 const symMenu=document.getElementById('sym-menu');
+const depthLevels=[5,10,20,50,100,500,1000,5000];
+let currentDepth=100;
+const depthButtons=document.getElementById('depth-buttons');
 function initSymMenu(){
   if(symMenu.hasChildNodes()) return;
   derivSyms.forEach((s,i)=>{
@@ -80,6 +84,23 @@ function initSymMenu(){
     if(i===0) b.classList.add('active');
     b.onclick=()=>showSym(s,b);
     symMenu.appendChild(b);
+  });
+}
+function initDepthButtons(){
+  if(depthButtons.hasChildNodes()) return;
+  depthLevels.forEach(d=>{
+    let b=document.createElement('button');
+    b.textContent=d;
+    b.className='menu';
+    if(d===currentDepth) b.classList.add('active');
+    b.onclick=()=>{
+      currentDepth=d;
+      depthButtons.querySelectorAll('.menu').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      document.getElementById('orders-wrap').innerHTML='';
+      load();
+    };
+    depthButtons.appendChild(b);
   });
 }
 function showSym(sym,btn){
@@ -106,6 +127,7 @@ function showTab(tab,btn){
   const needsSym=['derivs','orders','trades','cancels'].includes(tab);
   symMenu.style.display=needsSym?'flex':'none';
   if(needsSym) initSymMenu();
+  if(tab==='orders') initDepthButtons();
   if(tab==='settings') loadSettings();
   load();
 }
@@ -183,13 +205,14 @@ async function load(){
     mk('derivs-basis','Basis (USD)',b,v=>'$'+Number(v).toFixed(2),'#EE6666');
     mk('derivs-oi','Open Interest',o,v=>Number(v).toLocaleString(),'#91CC75',true);
   }else if(currentTab==='orders'){
+    initDepthButtons();
     let wrap=document.getElementById('orders-wrap');
     if(!wrap.hasChildNodes()){
       wrap.innerHTML=`<h3>${currentSym} Bids/Asks</h3><div id='orders-chart' style='width:100%;height:600px;border:1px solid #ccc'></div>`;
     }else{
       wrap.querySelector('h3').textContent=`${currentSym} Bids/Asks`;
     }
-    let ob=await fetch(`/chart/orders?symbol=${currentSym}`).then(r=>r.json());
+    let ob=await fetch(`/chart/orders?symbol=${currentSym}&limit=${currentDepth}`).then(r=>r.json());
     let chart=echarts.init(document.getElementById('orders-chart'));
     let dec=symDecimals[currentSym]??2;
     let priceStr=Number(ob.price).toFixed(dec);
