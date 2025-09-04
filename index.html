@@ -72,8 +72,8 @@ const symDecimals={
 let currentSym=derivSyms[0];
 let currentTab='holdings';
 const symMenu=document.getElementById('sym-menu');
-const depthLevels=[5,10,20,50,100,500,1000,5000];
-let currentDepth=100;
+const depthLevels=[500,1000,5000];
+let currentDepth=500;
 const depthButtons=document.getElementById('depth-buttons');
 const vaPercents=[0.7,0.75,0.8,0.85];
 let currentVA=0.7;
@@ -280,7 +280,6 @@ async function load(){
     if(bestBid!=null&&bestAsk!=null) mid=(bestBid+bestAsk)/2;
     else if(bestBid!=null) mid=bestBid;
     else if(bestAsk!=null) mid=bestAsk;
-    latestPrice=mid;
     updateOrdersTitle();
     const fPrices=[],fBuys=[],fSells=[];
     for(let i=0;i<prices.length;i++){
@@ -290,7 +289,8 @@ async function load(){
       fBuys.push(buys[i]);
       fSells.push(sells[i]);
     }
-    let priceStr=Number(mid).toFixed(dec);
+    const linePrice=latestPrice||mid;
+    let priceStr=Number(linePrice).toFixed(dec);
 
     chart.setOption({
       tooltip:{},
@@ -403,7 +403,7 @@ async function load(){
   }
 }
 setInterval(load,5000);
-setInterval(refreshPrice,15000);
+setInterval(refreshPrice,5000);
 refreshPrice().then(load);
 
 async function triggerBackfill(hours,btn){
