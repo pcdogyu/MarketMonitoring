@@ -131,6 +131,28 @@ async def fetch_price(symbol: str) -> float:
         return 0.0
 
 
+def fetch_price_last_hour(symbol: str) -> dict[str, float]:
+    """Fetch 1m price data for the last hour via Binance.
+
+    Returns a mapping of ISO timestamp -> price.
+    """
+
+    try:
+        resp = httpx.get(
+            "https://api.binance.com/api/v3/klines",
+            params={"symbol": symbol, "interval": "1m", "limit": 60},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        klines = resp.json()
+        return {
+            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(k[0] / 1000)): float(k[4])
+            for k in klines
+        }
+    except Exception:
+        return {}
+
+
 async def _refresh_once() -> Dict[str, Any]:
     """Fetch holdings and derivatives and persist them to disk."""
 
@@ -481,6 +503,9 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
     except Exception:
         price_map = {}
 
+    if not price_map:
+        price_map = fetch_price_last_hour(symbol.upper())
+
     # Try DB first
     try:
         data = db_query_derivs(symbol.upper(), secs)
@@ -529,8 +554,28 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
         if len(p_series) < len(result["timestamps"]):
             p_series.extend([None] * (len(result["timestamps"]) - len(p_series)))
         result["price"] = [price_map.get(t, p) for t, p in zip(result["timestamps"], p_series)]
+        if result["timestamps"]:
+            return result
+        if price_map:
+            ts_sorted = sorted(price_map.keys())
+            return {
+                "funding": [],
+                "basis": [],
+                "oi": [],
+                "price": [price_map[t] for t in ts_sorted],
+                "timestamps": ts_sorted,
+            }
         return result
     except Exception:
+        if price_map:
+            ts_sorted = sorted(price_map.keys())
+            return {
+                "funding": [],
+                "basis": [],
+                "oi": [],
+                "price": [price_map[t] for t in ts_sorted],
+                "timestamps": ts_sorted,
+            }
         return {"funding": [], "basis": [], "oi": [], "price": [], "timestamps": []}
 
 
