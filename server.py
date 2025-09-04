@@ -327,10 +327,21 @@ async def _maybe_backfill_24h() -> None:
             continue
         try:
             series = await derivs_backfill(s)
-            for t, f, b, o in zip(series["timestamps"], series["funding"], series["basis"], series["oi"]):
-                payload = {"funding": f, "basis": b, "oi": o, "time": t}
+            for t, f, b, o, p in zip(
+                series["timestamps"],
+                series["funding"],
+                series["basis"],
+                series["oi"],
+                series.get("price", []),
+            ):
+                payload = {"funding": f, "basis": b, "oi": o, "price": p, "time": t}
                 try:
                     db_save_derivs(s, payload)
+                except Exception:
+                    pass
+                try:
+                    if p is not None:
+                        db_save_price(s, t, p)
                 except Exception:
                     pass
                 append_deriv_history(s, {**payload, "symbol": s}, BASE_DIR / "data")
@@ -581,6 +592,9 @@ async def chart_cancels(symbol: str) -> Dict[str, Any]:
 
     sym = symbol.upper()
     hist = CANCEL_HISTORY.get(sym, [])
+    if not hist:
+        now_ms = int(time.time() * 1000)
+        return {"symbol": sym, "timestamps": [now_ms], "counts": [0]}
     times = [t for t, _ in hist]
     counts = [c for _, c in hist]
     return {"symbol": sym, "timestamps": times, "counts": counts}
