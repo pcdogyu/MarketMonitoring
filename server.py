@@ -32,6 +32,7 @@ from db import (
     save_derivs as db_save_derivs,
     save_holdings as db_save_holdings,
     query_derivs as db_query_derivs,
+    query_price as db_query_price,
     save_price as db_save_price,
     save_cex_holdings as db_save_cex_holdings,
 )
@@ -366,11 +367,19 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
         return 24 * 3600
 
     secs = _parse_window(window)
+    # Load price history from DB and map by timestamp
+    price_map: Dict[str, float] = {}
+    try:
+        p = db_query_price(symbol.upper(), secs)
+        price_map = dict(zip(p.get("timestamps", []), p.get("price", [])))
+    except Exception:
+        price_map = {}
 
     # Try DB first
     try:
         data = db_query_derivs(symbol.upper(), secs)
         if data["timestamps"]:
+            data["price"] = [price_map.get(t) for t in data["timestamps"]]
             return data
     except Exception:
         pass
@@ -404,14 +413,16 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
         def filt(arr):
             return [v for v, keep in zip(arr, xs) if keep]
 
-        return {
+        result = {
             "funding": filt(data.get("funding", [])),
             "basis": filt(data.get("basis", [])),
             "oi": filt(data.get("oi", [])),
             "timestamps": [t for t, keep in zip(data.get("timestamps", []), xs) if keep],
         }
+        result["price"] = [price_map.get(t) for t in result["timestamps"]]
+        return result
     except Exception:
-        return {"funding": [], "basis": [], "oi": [], "timestamps": []}
+        return {"funding": [], "basis": [], "oi": [], "price": [], "timestamps": []}
 
 
 @app.post("/backfill/derivs")
