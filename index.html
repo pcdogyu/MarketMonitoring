@@ -75,6 +75,8 @@ const symMenu=document.getElementById('sym-menu');
 const depthLevels=[5,10,20,50,100,500,1000,5000];
 let currentDepth=100;
 const depthButtons=document.getElementById('depth-buttons');
+const vaPercents=[0.7,0.75,0.8,0.85];
+let currentVA=0.7;
 function initSymMenu(){
   if(symMenu.hasChildNodes()) return;
   derivSyms.forEach((s,i)=>{
@@ -101,6 +103,23 @@ function initDepthButtons(){
       load();
     };
     depthButtons.appendChild(b);
+  });
+}
+function initVAButtons(){
+  const btns=document.getElementById('va-buttons');
+  if(!btns || btns.hasChildNodes()) return;
+  vaPercents.forEach(p=>{
+    let b=document.createElement('button');
+    b.textContent=Math.round(p*100)+'%';
+    b.className='menu';
+    if(p===currentVA) b.classList.add('active');
+    b.onclick=()=>{
+      currentVA=p;
+      btns.querySelectorAll('.menu').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      load();
+    };
+    btns.appendChild(b);
   });
 }
 function showSym(sym,btn){
@@ -237,42 +256,52 @@ async function load(){
   }else if(currentTab==='trades'){
     let wrap=document.getElementById('trades-wrap');
     if(!wrap.hasChildNodes()){
-      wrap.innerHTML=`<h3>${currentSym}</h3><div id='trades-chart' style='width:100%;height:80vh;border:1px solid #ccc'></div>`;
+      wrap.innerHTML=`<h3>${currentSym}</h3><div id='va-buttons' style='margin:10px 0;display:flex;gap:4px'></div><div id='trades-chart' style='width:100%;height:80vh;border:1px solid #ccc'></div>`;
+      initVAButtons();
     }else{
       wrap.querySelector('h3').textContent=currentSym;
+      initVAButtons();
     }
     let td=await fetch(`/chart/trades?symbol=${currentSym}`).then(r=>r.json());
-    let dec=symDecimals[currentSym]??2;
     const prices=td.prices.map(Number);
     const vols=td.volumes.map(Number);
+    const curPrice=Number(td.price)||0;
     const binCount=35;
     let tc=echarts.init(document.getElementById('trades-chart'));
     if(prices.length){
-      const minP=Math.min(...prices);
-      const maxP=Math.max(...prices);
-      const binSize=(maxP-minP)/binCount||1;
+      const minP=Math.floor(Math.min(...prices));
+      const maxP=Math.ceil(Math.max(...prices));
+      const binSize=Math.max(1,Math.ceil((maxP-minP)/binCount));
       const binVolumes=new Array(binCount).fill(0);
       prices.forEach((p,i)=>{
         let idx=Math.floor((p-minP)/binSize);
-        if(idx===binCount) idx=binCount-1;
+        if(idx<0) idx=0;
+        if(idx>=binCount) idx=binCount-1;
         binVolumes[idx]+=vols[i];
       });
       const binLabels=[];
       for(let i=0;i<binCount;i++){
         const start=minP+i*binSize;
         const end=start+binSize;
-        binLabels.push(`${start.toFixed(dec)}-${end.toFixed(dec)}`);
+        binLabels.push(`${start}-${end}`);
       }
       const totalVol=binVolumes.reduce((a,b)=>a+b,0);
-      const order=[...binVolumes.keys()].sort((a,b)=>binVolumes[b]-binVolumes[a]);
-      const topBins=new Set(order.slice(0,3));
-      const valueArea=new Set();
-      let acc=0;
-      for(const idx of order){
-        if(acc/totalVol>=0.7) break;
-        valueArea.add(idx);
-        acc+=binVolumes[idx];
+      let pocIdx=binVolumes.indexOf(Math.max(...binVolumes));
+      const valueArea=new Set([pocIdx]);
+      let acc=binVolumes[pocIdx];
+      let left=pocIdx-1,right=pocIdx+1;
+      while(acc/totalVol<currentVA&&(left>=0||right<binCount)){
+        const lv=left>=0?binVolumes[left]:-1;
+        const rv=right<binCount?binVolumes[right]:-1;
+        if(lv>=rv){
+          if(left>=0){valueArea.add(left);acc+=binVolumes[left];left--;}
+          else{valueArea.add(right);acc+=binVolumes[right];right++;}
+        }else{
+          if(right<binCount){valueArea.add(right);acc+=binVolumes[right];right++;}
+          else{valueArea.add(left);acc+=binVolumes[left];left--;}
+        }
       }
+      const topBins=new Set([...binVolumes.keys()].sort((a,b)=>binVolumes[b]-binVolumes[a]).slice(0,3));
       const colors=binVolumes.map((_,i)=>{
         if(topBins.has(i)) return 'purple';
         if(valueArea.has(i)) return 'blue';
@@ -281,12 +310,23 @@ async function load(){
       const displayVols=binVolumes.slice().reverse();
       const displayLabels=binLabels.slice().reverse();
       const displayColors=colors.slice().reverse();
+      let lineLabel='';
+      if(curPrice){
+        let idx=Math.floor((curPrice-minP)/binSize);
+        if(idx<0) idx=0;
+        if(idx>=binCount) idx=binCount-1;
+        lineLabel=displayLabels[binCount-1-idx];
+      }
+      const seriesOpt={type:'bar',data:displayVols,barWidth:'60%',itemStyle:{color:(p)=>displayColors[p.dataIndex]}};
+      if(lineLabel){
+        seriesOpt.markLine={symbol:'none',lineStyle:{type:'dashed',color:'red'},data:[{yAxis:lineLabel}]};
+      }
       tc.setOption({
         tooltip:{formatter:p=>`${p.name}: ${Number(p.value).toLocaleString()}`},
         grid:{left:60,right:20,top:20,bottom:20},
         xAxis:{type:'value'},
         yAxis:{type:'category',data:displayLabels},
-        series:[{type:'bar',data:displayVols,barWidth:'60%',itemStyle:{color:(p)=>displayColors[p.dataIndex]}}]
+        series:[seriesOpt]
       });
     }else{
       tc.clear();
