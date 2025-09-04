@@ -709,7 +709,9 @@ async def chart_trades(symbol: str) -> Dict[str, Any]:
     prices = sorted(volumes_dict.keys(), reverse=True)
     volumes = [volumes_dict[p] for p in prices]
 
-    return {"symbol": sym, "prices": prices, "volumes": volumes}
+    price = await fetch_price(sym)
+
+    return {"symbol": sym, "prices": prices, "volumes": volumes, "price": price}
 
 
 @app.post("/labels/import")
