@@ -181,8 +181,8 @@ def append_history(
 # Historical backfill via Binance (5m interval)
 
 
-async def backfill_24h(symbol: str) -> Dict[str, Any]:
-    """Return 24h history at 5m interval for ``symbol`` using Binance-only.
+async def backfill(symbol: str, hours: int = 24) -> Dict[str, Any]:
+    """Return ``hours`` of history at 5m interval for ``symbol`` using Binance.
 
     - funding: carry-forward of fundingRate points from ``fapi/v1/fundingRate``
     - basis:   markPriceKlines - indexPriceKlines (close values)
@@ -190,7 +190,7 @@ async def backfill_24h(symbol: str) -> Dict[str, Any]:
     """
 
     interval = "5m"
-    points = 288  # 24h
+    points = int(hours * 60 / 5)  # 12 points per hour
 
     async with httpx.AsyncClient(timeout=15) as client:
         # Basis via mark/index klines
@@ -235,7 +235,7 @@ async def backfill_24h(symbol: str) -> Dict[str, Any]:
         try:
             import time as _t
             end = int(_t.time() * 1000)
-            start = end - 24 * 3600 * 1000
+            start = end - hours * 3600 * 1000
             fr = await client.get(
                 "https://fapi.binance.com/fapi/v1/fundingRate",
                 params={"symbol": symbol, "startTime": start, "endTime": end, "limit": 1000},
@@ -251,7 +251,7 @@ async def backfill_24h(symbol: str) -> Dict[str, Any]:
     if not basis_x:
         import time as _t
         now = int(_t.time())
-        start = now - 24 * 3600
+        start = now - hours * 3600
         basis_x = list(range(start - (start % 300), now, 300))
         basis = [0.0] * len(basis_x)
 
