@@ -13,16 +13,15 @@ import csv
 import io
 import json
 import time
-import hmac
-import hashlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict
-from urllib.parse import urlencode
+from collections import defaultdict
 
 from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 import httpx
+import websockets
 
 from derivatives import append_history as append_deriv_history
 from derivatives import fetch_all as fetch_derivs
@@ -45,6 +44,11 @@ app = FastAPI()
 
 # Base directory of the project – ensures paths work regardless of CWD
 BASE_DIR = Path(__file__).resolve().parent
+
+# In-memory store of cancel counts keyed by symbol and their history
+CANCEL_COUNTS: Dict[str, int] = defaultdict(int)
+CANCEL_HISTORY: Dict[str, list[tuple[int, int]]] = defaultdict(list)
+MAX_CANCEL_POINTS = 1000
 
 # ---------------------------------------------------------------------------
 # Utility helpers
@@ -208,6 +212,65 @@ async def _cleanup_loop() -> None:
             pass
 
 
+async def _keepalive_listenkey(listen_key: str, api_key: str, api_base: str) -> None:
+    """Periodically ping Binance to keep the listenKey alive."""
+    headers = {"X-MBX-APIKEY": api_key}
+    async with httpx.AsyncClient(timeout=10) as client:
+        while True:
+            await asyncio.sleep(30 * 60)
+            try:
+                await client.put(
+                    api_base + "/api/v3/userDataStream",
+                    params={"listenKey": listen_key},
+                    headers=headers,
+                )
+            except Exception:
+                pass
+
+
+async def _cancel_ws_loop() -> None:
+    """Listen to Binance user data stream and count cancelled orders."""
+    while True:
+        try:
+            cfg = json.loads(_settings_path().read_text())
+            ex_cfg = cfg.get("exchanges", {}).get("binance")
+            if not ex_cfg:
+                await asyncio.sleep(60)
+                continue
+            api_key = ex_cfg.get("api_key")
+            api_base = ex_cfg.get("api_base", "https://api.binance.com")
+            headers = {"X-MBX-APIKEY": api_key}
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    api_base + "/api/v3/userDataStream", headers=headers
+                )
+                resp.raise_for_status()
+                listen_key = resp.json().get("listenKey")
+            asyncio.create_task(
+                _keepalive_listenkey(listen_key, api_key, api_base)
+            )
+            ws_url = "wss://stream.binance.com/ws/" + listen_key
+            async with websockets.connect(ws_url, ping_interval=20, ping_timeout=20) as ws:
+                async for msg in ws:
+                    try:
+                        data = json.loads(msg)
+                    except Exception:
+                        continue
+                    if data.get("e") == "executionReport":
+                        status = data.get("X")
+                        if status in ("CANCELED", "EXPIRED"):
+                            sym = data.get("s")
+                            if sym:
+                                CANCEL_COUNTS[sym] += 1
+                                CANCEL_HISTORY[sym].append(
+                                    (int(time.time() * 1000), CANCEL_COUNTS[sym])
+                                )
+                                if len(CANCEL_HISTORY[sym]) > MAX_CANCEL_POINTS:
+                                    CANCEL_HISTORY[sym] = CANCEL_HISTORY[sym][-MAX_CANCEL_POINTS:]
+        except Exception:
+            await asyncio.sleep(5)
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     global LAST_SNAPSHOT
@@ -237,6 +300,7 @@ async def _startup() -> None:
     # Start background refresh loop after backfill completes
     asyncio.create_task(_refresh_loop())
     asyncio.create_task(_cleanup_loop())
+    asyncio.create_task(_cancel_ws_loop())
 
 
 async def _maybe_backfill_24h() -> None:
@@ -493,28 +557,13 @@ async def chart_orders(symbol: str) -> Dict[str, Any]:
 
 @app.get("/chart/cancels")
 async def chart_cancels(symbol: str) -> Dict[str, Any]:
-    """Return number of cancelled orders for ``symbol`` on Binance."""
+    """Return cancel count history for ``symbol``."""
 
     sym = symbol.upper()
-    try:
-        cfg = json.loads(_settings_path().read_text())
-        ex_cfg = cfg.get("exchanges", {}).get("binance")
-        if not ex_cfg:
-            raise KeyError("missing binance config")
-        ts = int(time.time() * 1000)
-        params = {"symbol": sym, "timestamp": ts}
-        query = urlencode(params)
-        sig = hmac.new(ex_cfg["secret"].encode(), query.encode(), hashlib.sha256).hexdigest()
-        headers = {"X-MBX-APIKEY": ex_cfg["api_key"]}
-        url = ex_cfg.get("api_base", "https://api.binance.com") + "/api/v3/allOrders"
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, params={**params, "signature": sig}, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-        count = sum(1 for o in data if o.get("status") == "CANCELED")
-    except Exception:
-        count = 0
-    return {"symbol": sym, "count": count}
+    hist = CANCEL_HISTORY.get(sym, [])
+    times = [t for t, _ in hist]
+    counts = [c for _, c in hist]
+    return {"symbol": sym, "timestamps": times, "counts": counts}
 
 
 @app.get("/chart/trades")

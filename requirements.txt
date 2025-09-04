@@ -4,3 +4,5 @@ httpx>=0.24
 python-multipart>=0.0.9
 pysqlite3-binary>=0.5
 # SQLite DB handled via stdlib sqlite3 or pysqlite3 fallback
+websockets>=10
+
