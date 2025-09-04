@@ -72,8 +72,8 @@ const symDecimals={
 let currentSym=derivSyms[0];
 let currentTab='holdings';
 const symMenu=document.getElementById('sym-menu');
-const depthLevels=[5,10,20,50,100,500,1000,5000];
-let currentDepth=100;
+const depthLevels=[500,1000,5000];
+let currentDepth=500;
 const depthButtons=document.getElementById('depth-buttons');
 const vaPercents=[0.7,0.75,0.8,0.85];
 let currentVA=0.7;
@@ -245,7 +245,6 @@ async function load(){
     mk('derivs-basis','Basis (USD)',b,v=>'$'+Number(v).toFixed(2),'#EE6666');
     mk('derivs-oi','Open Interest',o,v=>Math.round(v).toLocaleString(),'#91CC75',true);
   }else if(currentTab==='orders'){
-    initDepthButtons();
     let wrap=document.getElementById('orders-wrap');
     if(!wrap.hasChildNodes()){
       wrap.innerHTML=`<h3>${currentSym} Bids/Asks</h3><div id='orders-chart' style='width:100%;height:600px;border:1px solid #ccc'></div>`;
@@ -274,16 +273,27 @@ async function load(){
     latestPrice=mid;
     let priceStr=Number(mid).toFixed(dec);
 
+    const minPrice=mid*0.8;
+    const maxPrice=mid*1.2;
+    const filteredPrices=[],filteredBuys=[],filteredSells=[];
+    prices.forEach((p,i)=>{
+      if(p>=minPrice && p<=maxPrice){
+        filteredPrices.push(p);
+        filteredBuys.push(buys[i]);
+        filteredSells.push(sells[i]);
+      }
+    });
+
     chart.setOption({
       tooltip:{},
       legend:{data:['buy','sell']},
       grid:{left:0,right:0,containLabel:true},
-      xAxis:{type:'category',data:prices.map(p=>p.toFixed(dec)),boundaryGap:false},
+      xAxis:{type:'category',data:filteredPrices.map(p=>p.toFixed(dec)),boundaryGap:false},
       yAxis:{type:'value'},
       dataZoom:[{type:'inside'}],
       series:[
-        {name:'buy',data:buys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
-        {name:'sell',data:sells,type:'bar'}
+        {name:'buy',data:filteredBuys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
+        {name:'sell',data:filteredSells,type:'bar'}
       ]
     });
   }else if(currentTab==='trades'){
