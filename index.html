@@ -187,7 +187,7 @@ async function load(){
     };
     let p=toSeries(d.price);
     let f=toSeries(d.funding,v=>v*100);
-    let b=(d.basis||[]).map(v=>Number(v));
+    let b=toSeries(d.basis);
     let o=toSeries(d.oi);
     let dec=symDecimals[currentSym]??2;
     let mk=(id,name,data,axisFmt,color,autoScale=false)=>{
