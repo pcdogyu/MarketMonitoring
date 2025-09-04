@@ -38,6 +38,8 @@ from db import (
     query_price as db_query_price,
     save_price as db_save_price,
     save_cex_holdings as db_save_cex_holdings,
+    query_trade_volumes as db_query_trade_volumes,
+    save_trade_volumes as db_save_trade_volumes,
     prune_old_data,
 )
 from holdings import refresh_holdings
@@ -602,53 +604,49 @@ async def chart_cancels(symbol: str) -> Dict[str, Any]:
 
 @app.get("/chart/trades")
 async def chart_trades(symbol: str) -> Dict[str, Any]:
-    """Return price series and 70% volume range for ``symbol`` since UTC+8 day start."""
+    """Return volume profile for ``symbol`` since UTC+8 day start (8am)."""
 
     sym = symbol.upper()
     tz = timezone(timedelta(hours=8))
     now = datetime.now(tz)
-    start = datetime(now.year, now.month, now.day, tzinfo=tz)
+    start = datetime(now.year, now.month, now.day, 8, tzinfo=tz)
+    if now.hour < 8:
+        start -= timedelta(days=1)
     start_ms = int(start.timestamp() * 1000)
-    url = "https://api.binance.com/api/v3/klines"
-    params = {"symbol": sym, "interval": "5m", "startTime": start_ms, "limit": 1000}
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception:
-        data = []
+    date_key = start.strftime("%Y-%m-%d")
 
-    times = [int(k[0]) for k in data]
-    closes = [float(k[4]) for k in data]
-    volumes = [float(k[5]) for k in data]
-    total = sum(volumes)
-    lower = upper = 0.0
-    if total > 0:
-        pairs = sorted(zip(closes, volumes))
-        cum = 0.0
-        lower_bound = total * 0.15
-        upper_bound = total * 0.85
-        l = None
-        u = None
-        for price, vol in pairs:
-            cum += vol
-            if l is None and cum >= lower_bound:
-                l = price
-            if u is None and cum >= upper_bound:
-                u = price
-                break
-        lower = l if l is not None else pairs[0][0]
-        upper = u if u is not None else pairs[-1][0]
+    volumes_dict = db_query_trade_volumes(sym, date_key)
 
-    return {
-        "symbol": sym,
-        "times": times,
-        "prices": closes,
-        "volumes": volumes,
-        "lower": lower,
-        "upper": upper,
-    }
+    if not volumes_dict:
+        url = "https://api.binance.com/api/v3/aggTrades"
+        params: Dict[str, Any] = {"symbol": sym, "startTime": start_ms, "limit": 1000}
+        end_ms = int(now.timestamp() * 1000)
+        acc: Dict[float, float] = defaultdict(float)
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                while True:
+                    resp = await client.get(url, params=params)
+                    resp.raise_for_status()
+                    trades = resp.json()
+                    if not trades:
+                        break
+                    for t in trades:
+                        acc[float(t["p"])] += float(t["q"])
+                    last_time = trades[-1]["T"]
+                    last_id = trades[-1]["a"]
+                    if last_time >= end_ms or len(trades) < 1000:
+                        break
+                    params = {"symbol": sym, "fromId": last_id + 1, "limit": 1000}
+        except Exception:
+            acc = {}
+        volumes_dict = dict(acc)
+        if volumes_dict:
+            db_save_trade_volumes(sym, date_key, volumes_dict)
+
+    prices = sorted(volumes_dict.keys(), reverse=True)
+    volumes = [volumes_dict[p] for p in prices]
+
+    return {"symbol": sym, "prices": prices, "volumes": volumes}
 
 
 @app.post("/labels/import")

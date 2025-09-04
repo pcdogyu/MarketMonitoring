@@ -207,25 +207,11 @@ async function load(){
     let dec=symDecimals[currentSym]??2;
     let tc=echarts.init(document.getElementById('trades-chart'));
     tc.setOption({
-      tooltip:{trigger:'axis'},
-      xAxis:{type:'category',data:toUTC8(td.times)},
-      yAxis:[
-        {type:'value',axisLabel:{formatter:v=>Number(v).toFixed(dec)}},
-        {type:'value',axisLabel:{formatter:v=>Number(v).toLocaleString()}},
-      ],
-      series:[
-        {type:'line',data:td.prices,showSymbol:false,
-          markArea:{
-            silent:true,
-            itemStyle:{color:'rgba(30,144,255,0.2)'},
-            data:[
-              [{yAxis:'min'},{yAxis:td.lower}],
-              [{yAxis:td.upper},{yAxis:'max'}]
-            ]
-          }
-        },
-        {type:'bar',data:td.volumes,yAxisIndex:1,barWidth:'60%',itemStyle:{color:'#91CC75'}},
-      ]
+      tooltip:{formatter:p=>`${Number(p.name).toFixed(dec)}: ${Number(p.value).toLocaleString()}`},
+      grid:{left:60,right:20,top:20,bottom:20},
+      xAxis:{type:'value'},
+      yAxis:{type:'category',data:td.prices.map(p=>Number(p).toFixed(dec))},
+      series:[{type:'bar',data:td.volumes,barWidth:'60%',itemStyle:{color:'#91CC75'}}]
     });
   }else if(currentTab==='cancels'){
     let wrap=document.getElementById('cancels-wrap');
