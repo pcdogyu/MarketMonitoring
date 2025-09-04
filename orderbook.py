@@ -142,7 +142,7 @@ async def fetch(symbol: str) -> Dict[str, Any]:
     buy = [buckets[p]["buy"] for p in prices]
     sell = [buckets[p]["sell"] for p in prices]
 
-    # Round prices to the desired precision for output and current price
+    # Round prices to the desired precision for output and determine current price
     prices = [round(p, decimals) for p in prices]
     mark = await _mark_price(symbol)
     price = round(mark if mark else mid, decimals)
@@ -155,5 +155,19 @@ async def fetch(symbol: str) -> Dict[str, Any]:
         prices.insert(idx, price)
         buy.insert(idx, 0.0)
         sell.insert(idx, 0.0)
+
+    # Extend price levels to show deeper depth around current price
+    depth = 100
+    lower_bound = round(price - depth * interval, decimals)
+    upper_bound = round(price + depth * interval, decimals)
+
+    while prices and prices[0] > lower_bound:
+        prices.insert(0, round(prices[0] - interval, decimals))
+        buy.insert(0, 0.0)
+        sell.insert(0, 0.0)
+    while prices and prices[-1] < upper_bound:
+        prices.append(round(prices[-1] + interval, decimals))
+        buy.append(0.0)
+        sell.append(0.0)
 
     return {"symbol": symbol, "price": price, "prices": prices, "buy": buy, "sell": sell}
