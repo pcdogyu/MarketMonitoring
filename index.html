@@ -280,10 +280,11 @@ async function load(){
         binVolumes[idx]+=vols[i];
       });
       const binLabels=[];
+      const fmtPrice=p=>Math.round(p);
       for(let i=0;i<binCount;i++){
         const start=minP+i*binSize;
         const end=start+binSize;
-        binLabels.push(`${start}-${end}`);
+        binLabels.push(`${fmtPrice(start)}-${fmtPrice(end)}`);
       }
       const totalVol=binVolumes.reduce((a,b)=>a+b,0);
       let pocIdx=binVolumes.indexOf(Math.max(...binVolumes));
@@ -307,6 +308,11 @@ async function load(){
         if(valueArea.has(i)) return 'blue';
         return '#91CC75';
       });
+      for(let i=1;i<colors.length-1;i++){
+        if(colors[i]==='#91CC75' && colors[i-1]==='blue' && colors[i+1]==='blue'){
+          colors[i]='lightblue';
+        }
+      }
       const displayVols=binVolumes.slice().reverse();
       const displayLabels=binLabels.slice().reverse();
       const displayColors=colors.slice().reverse();
@@ -319,7 +325,7 @@ async function load(){
       }
       const seriesOpt={type:'bar',data:displayVols,barWidth:'60%',itemStyle:{color:(p)=>displayColors[p.dataIndex]}};
       if(lineLabel){
-        seriesOpt.markLine={symbol:'none',lineStyle:{type:'dashed',color:'red'},data:[{yAxis:lineLabel}]};
+        seriesOpt.markLine={symbol:'none',lineStyle:{type:'dashed',color:'red'},label:{formatter:()=>Math.round(curPrice)},data:[{yAxis:lineLabel}]};
       }
       tc.setOption({
         tooltip:{formatter:p=>`${p.name}: ${Number(p.value).toLocaleString()}`},
