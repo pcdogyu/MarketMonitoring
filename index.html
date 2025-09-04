@@ -178,13 +178,12 @@ async function load(){
     }
     let d=await fetch(`/chart/derivs?symbol=${currentSym}`).then(r=>r.json());
     let x=toUTC8(d.timestamps);
-    const toSeries=(arr,fn=v=>v)=>{
-      return (arr||[]).map(v=>{
-        const num=Number(v);
-        // Treat missing, zero, or non-numeric values as gaps so lines connect
-        return (!v||Number.isNaN(num)||num===0)?null:fn(num);
+    const toSeries = (arr, fn = v => v) =>
+      (arr ?? []).map(v => {
+        const num = Number(v);
+        // Treat null/undefined, zero, or NaN as gaps so lines connect
+        return (v == null || num === 0 || Number.isNaN(num)) ? null : fn(num);
       });
-    };
     let p=toSeries(d.price);
     let f=toSeries(d.funding,v=>v*100);
     let b=(d.basis||[]).map(v=>Number(v));
