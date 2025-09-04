@@ -230,12 +230,14 @@ async function load(){
   }else if(currentTab==='cancels'){
     let wrap=document.getElementById('cancels-wrap');
     if(!wrap.hasChildNodes()){
-      wrap.innerHTML=`<h3>${currentSym}</h3><div id='cancels-count' style='font-size:24px;margin-top:10px'></div>`;
+      wrap.innerHTML=`<h3>${currentSym}</h3><div id='cancels-line' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>`;
     }else{
       wrap.querySelector('h3').textContent=currentSym;
     }
     let d=await fetch(`/chart/cancels?symbol=${currentSym}`).then(r=>r.json());
-    document.getElementById('cancels-count').textContent='取消数量: '+d.count;
+    let chart=echarts.init(document.getElementById('cancels-line'));
+    let x=toUTC8(d.timestamps);
+    chart.setOption({tooltip:{trigger:'axis'},xAxis:{type:'category',data:x},yAxis:{type:'value'},series:[{data:d.counts,type:'line'}]});
   }
 }
 setInterval(load,5000);load();
