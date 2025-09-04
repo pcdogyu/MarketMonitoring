@@ -95,15 +95,20 @@ async def _mark_price(symbol: str) -> float:
 async def fetch(symbol: str, limit: int = 100) -> Dict[str, Any]:
     """Aggregate open orders across Binance, Bybit and OKX into price buckets.
 
-    ``limit`` controls how many levels to request from upstream exchanges and
-    how far to extend the price axis around the current price.
+    ``limit`` determines the depth shown around the current price.  To ensure
+    sufficient coverage when displaying shallow depths, at least 500 levels are
+    requested from upstream exchanges.
 
     Returns mapping ``{symbol, prices, buy, sell}`` where ``prices`` is a
     sorted list of price bucket levels and ``buy``/``sell`` are corresponding
     accumulated quantities.
     """
+
+    fetch_limit = max(limit, 500)
     books = await asyncio.gather(
-        _binance(symbol, limit), _bybit(symbol, limit), _okx(symbol, limit)
+        _binance(symbol, fetch_limit),
+        _bybit(symbol, fetch_limit),
+        _okx(symbol, fetch_limit),
     )
 
     # Determine interval based on symbol using SOLUSDT-style precision
