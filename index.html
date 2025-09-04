@@ -156,24 +156,32 @@ async function load(){
     }
     let d=await fetch(`/chart/derivs?symbol=${currentSym}`).then(r=>r.json());
     let x=toUTC8(d.timestamps);
-    let p=(d.price||[]).map(v=>v==null?null:Number(v));
-    let f=(d.funding||[]).map(v=>Number(v)*100);
+    const toSeries=(arr,fn=v=>v)=>{
+      return (arr||[]).map(v=>{
+        const num=Number(v);
+        return (!v||num===0)?null:fn(num);
+      });
+    };
+    let p=toSeries(d.price);
+    let f=toSeries(d.funding,v=>v*100);
     let b=(d.basis||[]).map(v=>Number(v));
-    let o=(d.oi||[]).map(v=>Number(v));
+    let o=toSeries(d.oi);
     let dec=symDecimals[currentSym]??2;
-    let mk=(id,name,data,axisFmt,color)=>{
+    let mk=(id,name,data,axisFmt,color,autoScale=false)=>{
       let c=echarts.init(document.getElementById(id));
+      let yAxis={type:'value',name:name,axisLabel:{formatter:(val)=>axisFmt(val)}};
+      if(autoScale) Object.assign(yAxis,{scale:true,min:'dataMin',max:'dataMax'});
       c.setOption({
         tooltip:{trigger:'axis',formatter:(ps)=>{let p=ps[0];return p.axisValueLabel+'<br/>'+name+': '+axisFmt(p.data);}},
         xAxis:{type:'category',data:x},
-        yAxis:{type:'value',name:name,axisLabel:{formatter:(val)=>axisFmt(val)}},
-        series:[{name,showSymbol:false,type:'line',data,lineStyle:{color},itemStyle:{color}}]
+        yAxis,
+        series:[{name,showSymbol:false,type:'line',data,connectNulls:true,lineStyle:{color},itemStyle:{color}}]
       });
     };
-    mk('derivs-price','Price (USD)',p,v=>'$'+Number(v).toFixed(dec),'#3BA272');
+    mk('derivs-price','Price (USD)',p,v=>'$'+Number(v).toFixed(dec),'#3BA272',true);
     mk('derivs-funding','Funding (%)',f,v=>Number(v).toFixed(4)+'%','#5470C6');
     mk('derivs-basis','Basis (USD)',b,v=>'$'+Number(v).toFixed(2),'#EE6666');
-    mk('derivs-oi','Open Interest',o,v=>Number(v).toLocaleString(),'#91CC75');
+    mk('derivs-oi','Open Interest',o,v=>Number(v).toLocaleString(),'#91CC75',true);
   }else if(currentTab==='orders'){
     let wrap=document.getElementById('orders-wrap');
     if(!wrap.hasChildNodes()){
