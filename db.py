@@ -49,6 +49,17 @@ def init_db() -> None:
         )
         cur.execute(
             """
+            CREATE TABLE IF NOT EXISTS oi_cache (
+              symbol TEXT NOT NULL,
+              exchange TEXT NOT NULL,
+              oi REAL NOT NULL,
+              ts TEXT NOT NULL,
+              PRIMARY KEY(symbol, exchange)
+            )
+            """
+        )
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS trade_volumes (
               symbol TEXT NOT NULL,
               date TEXT NOT NULL,
@@ -62,6 +73,9 @@ def init_db() -> None:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_prices_sym_ts ON prices(symbol, ts)")
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_cex_holdings_ts_ex ON cex_holdings(ts, exchange)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_oi_cache_symbol ON oi_cache(symbol)"
         )
         con.commit()
 
@@ -100,6 +114,30 @@ def save_price(symbol: str, ts: str, price: float) -> None:
             (symbol, ts, float(price)),
         )
         con.commit()
+
+
+def save_oi_partial(symbol: str, exchange: str, oi: float, ts: str) -> None:
+    """Store a partial open-interest value for ``symbol`` from ``exchange``."""
+
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute(
+            "INSERT OR REPLACE INTO oi_cache(symbol,exchange,oi,ts) VALUES (?,?,?,?)",
+            (symbol, exchange, float(oi), ts),
+        )
+        con.commit()
+
+
+def sum_oi_if_complete(symbol: str) -> float | None:
+    """Return total open interest for ``symbol`` if all exchanges reported."""
+
+    with sqlite3.connect(DB_PATH) as con:
+        cur = con.cursor()
+        cur.execute("SELECT oi FROM oi_cache WHERE symbol=?", (symbol,))
+        rows = cur.fetchall()
+
+    if len(rows) >= 3:
+        return sum(r[0] for r in rows)
+    return None
 
 
 def save_cex_holdings(snapshot: Dict[str, Any]) -> None:

@@ -192,7 +192,14 @@ async function load(){
     let mk=(id,name,data,axisFmt,color,autoScale=false)=>{
       let c=echarts.init(document.getElementById(id));
       let yAxis={type:'value',name:name,axisLabel:{formatter:(val)=>axisFmt(val)}};
-      if(autoScale) Object.assign(yAxis,{scale:true,min:'dataMin',max:'dataMax'});
+      if(autoScale){
+        const filtered=data.filter(v=>v!=null);
+        if(filtered.length){
+          const minVal=Math.min(...filtered);
+          const maxVal=Math.max(...filtered);
+          Object.assign(yAxis,{scale:true,min:minVal,max:maxVal});
+        }
+      }
       c.setOption({
         tooltip:{trigger:'axis',formatter:(ps)=>{let p=ps[0];return p.axisValueLabel+'<br/>'+name+': '+axisFmt(p.data);}},
         xAxis:{type:'category',data:x},
@@ -203,7 +210,7 @@ async function load(){
     mk('derivs-price','Price (USD)',p,v=>'$'+Number(v).toFixed(dec),'#3BA272',true);
     mk('derivs-funding','Funding (%)',f,v=>Number(v).toFixed(4)+'%','#5470C6');
     mk('derivs-basis','Basis (USD)',b,v=>'$'+Number(v).toFixed(2),'#EE6666');
-    mk('derivs-oi','Open Interest',o,v=>Number(v).toLocaleString(),'#91CC75',true);
+    mk('derivs-oi','Open Interest',o,v=>Math.round(v).toLocaleString(),'#91CC75',true);
   }else if(currentTab==='orders'){
     initDepthButtons();
     let wrap=document.getElementById('orders-wrap');

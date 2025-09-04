@@ -180,7 +180,7 @@ async def _refresh_once() -> Dict[str, Any]:
     symbols = _symbols()
     max_points = int(12 * 3600 / interval)
     for sym in symbols:
-        deriv = await fetch_derivs(sym)
+        deriv = await fetch_derivs(sym, ts)
         deriv["time"] = ts
         # write to DB and JSON history for backward compatibility
         try:
