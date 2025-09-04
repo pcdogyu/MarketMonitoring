@@ -34,6 +34,7 @@ from db import (
     query_derivs as db_query_derivs,
     save_price as db_save_price,
     save_cex_holdings as db_save_cex_holdings,
+    prune_old_data,
 )
 from holdings import refresh_holdings
 from exchange_holdings import refresh_exchange_holdings
@@ -182,6 +183,30 @@ async def _refresh_loop() -> None:
         await asyncio.sleep(interval)
 
 
+async def _cleanup_loop() -> None:
+    """Periodically prune old rows from the database."""
+
+    while True:
+        now = datetime.now(timezone.utc)
+        next_noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
+        next_midnight = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        if now < next_noon:
+            next_run = next_noon
+        elif now < next_midnight:
+            next_run = next_midnight
+        else:
+            next_run = (now + timedelta(days=1)).replace(
+                hour=12, minute=0, second=0, microsecond=0
+            )
+        await asyncio.sleep((next_run - now).total_seconds())
+        try:
+            prune_old_data()
+        except Exception:
+            pass
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     global LAST_SNAPSHOT
@@ -210,6 +235,7 @@ async def _startup() -> None:
 
     # Start background refresh loop after backfill completes
     asyncio.create_task(_refresh_loop())
+    asyncio.create_task(_cleanup_loop())
 
 
 async def _maybe_backfill_24h() -> None:
