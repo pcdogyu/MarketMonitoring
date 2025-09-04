@@ -21,7 +21,11 @@ from collections import defaultdict
 from fastapi import FastAPI, File, UploadFile, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 import httpx
-import websockets
+
+try:  # Optional dependency used for cancel order monitoring
+    import websockets  # type: ignore
+except ImportError:  # pragma: no cover - dependency may be missing
+    websockets = None  # type: ignore
 
 from derivatives import append_history as append_deriv_history
 from derivatives import fetch_all as fetch_derivs
@@ -300,7 +304,8 @@ async def _startup() -> None:
     # Start background refresh loop after backfill completes
     asyncio.create_task(_refresh_loop())
     asyncio.create_task(_cleanup_loop())
-    asyncio.create_task(_cancel_ws_loop())
+    if websockets is not None:
+        asyncio.create_task(_cancel_ws_loop())
 
 
 async def _maybe_backfill_24h() -> None:
