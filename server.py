@@ -542,15 +542,30 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
             except Exception:
                 # If parsing fails, keep the point rather than dropping it
                 xs.append(True)
-        # filter arrays by xs mask
-        def filt(arr):
-            return [v for v, keep in zip(arr, xs) if keep]
+        # Filter arrays by ``xs`` mask while optionally converting zero or
+        # missing values to ``None`` so charts can skip them and connect line
+        # segments between valid points.
+        def filt(arr, skip_zero: bool = False):
+            out = []
+            for v, keep in zip(arr, xs):
+                if not keep:
+                    continue
+                if skip_zero:
+                    try:
+                        if not v or float(v) == 0:
+                            out.append(None)
+                            continue
+                    except Exception:
+                        out.append(None)
+                        continue
+                out.append(v)
+            return out
 
-        p_series = filt(data.get("price", []))
+        p_series = filt(data.get("price", []), skip_zero=True)
         result = {
-            "funding": filt(data.get("funding", [])),
-            "basis": filt(data.get("basis", [])),
-            "oi": filt(data.get("oi", [])),
+            "funding": filt(data.get("funding", []), skip_zero=True),
+            "basis": filt(data.get("basis", []), skip_zero=True),
+            "oi": filt(data.get("oi", []), skip_zero=True),
             "timestamps": [t for t, keep in zip(data.get("timestamps", []), xs) if keep],
         }
         if len(p_series) < len(result["timestamps"]):
