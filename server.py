@@ -26,7 +26,7 @@ import httpx
 
 from derivatives import append_history as append_deriv_history
 from derivatives import fetch_all as fetch_derivs
-from derivatives import backfill_24h as derivs_backfill
+from derivatives import backfill as derivs_backfill
 from db import (
     init_db,
     save_derivs as db_save_derivs,
@@ -242,7 +242,7 @@ async def _startup() -> None:
 async def _maybe_backfill_24h() -> None:
     """Backfill last 24h derivatives data if local store is empty.
 
-    Uses Binance endpoints via derivatives.backfill_24h. Runs once at startup.
+    Uses Binance endpoints via :func:`derivatives.backfill`. Runs once at startup.
     """
     symbols = _symbols()
     for s in symbols:
@@ -452,8 +452,8 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
 
 
 @app.post("/backfill/derivs")
-async def backfill_derivs() -> Dict[str, Any]:
-    """Force a 24h backfill for all symbols.
+async def backfill_derivs(hours: int = 24) -> Dict[str, Any]:
+    """Force a derivatives backfill for all symbols over ``hours``.
 
     Returns a map of symbol->inserted points.
     """
@@ -461,7 +461,7 @@ async def backfill_derivs() -> Dict[str, Any]:
     results: Dict[str, int] = {}
     for s in symbols:
         try:
-            series = await derivs_backfill(s)
+            series = await derivs_backfill(s, hours)
             n = 0
             for t, f, b, o in zip(series["timestamps"], series["funding"], series["basis"], series["oi"]):
                 payload = {"funding": f, "basis": b, "oi": o, "time": t}
