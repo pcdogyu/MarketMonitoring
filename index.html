@@ -209,7 +209,16 @@ async function load(){
         {type:'value',axisLabel:{formatter:v=>Number(v).toLocaleString()}},
       ],
       series:[
-        {type:'line',data:td.prices,showSymbol:false,markLine:{silent:true,data:[{yAxis:td.upper,lineStyle:{color:'red'}},{yAxis:td.lower,lineStyle:{color:'green'}}]}},
+        {type:'line',data:td.prices,showSymbol:false,
+          markArea:{
+            silent:true,
+            itemStyle:{color:'rgba(30,144,255,0.2)'},
+            data:[
+              [{yAxis:'min'},{yAxis:td.lower}],
+              [{yAxis:td.upper},{yAxis:'max'}]
+            ]
+          }
+        },
         {type:'bar',data:td.volumes,yAxisIndex:1,barWidth:'60%',itemStyle:{color:'#91CC75'}},
       ]
     });
