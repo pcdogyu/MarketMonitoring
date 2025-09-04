@@ -26,8 +26,12 @@
   <div id='predict-json' style='margin-top:10px'></div>
 </div>
 <div id='tab-derivs' style='display:none'>
-  <div style='margin:10px 0;color:#555;font-size:13px'>时间已转换为中国时区 (UTC+8)</div>
+  <div style='display:flex;align-items:center;gap:10px;margin:10px 0;color:#555;font-size:13px'>
+    <span>时间已转换为中国时区 (UTC+8)</span>
+    <button id='btn-backfill' class='menu' onclick='triggerBackfill()'>回填24h</button>
+  </div>
   <div id='derivs-wrap' style='display:grid;grid-template-columns:140px 1fr 1fr 1fr;gap:10px;align-items:start'></div>
+  <div id='backfill-note' style='color:#888;font-size:12px;margin-top:4px'></div>
 </div>
 <div id='tab-orders' style='display:none'>
   <div id='orders-wrap' style='margin-top:10px;width:100%'></div>
@@ -218,6 +222,23 @@ async function load(){
   }
 }
 setInterval(load,5000);load();
+
+async function triggerBackfill(){
+  const btn=document.getElementById('btn-backfill');
+  const note=document.getElementById('backfill-note');
+  btn.disabled=true; btn.textContent='回填中...'; note.textContent='';
+  try{
+    const res=await fetch('/backfill/derivs',{method:'POST'});
+    const data=await res.json();
+    note.textContent='回填完成: '+JSON.stringify(data.inserted_points||data);
+    // 触发一次加载刷新图表
+    load();
+  }catch(e){
+    note.textContent='回填失败: '+(e?.message||e);
+  }finally{
+    btn.disabled=false; btn.textContent='回填24h';
+  }
+}
 </script>
 </body>
 </html>
