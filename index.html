@@ -30,7 +30,8 @@
     <span>时间已转换为中国时区 (UTC+8)</span>
     <button id='btn-backfill' class='menu' onclick='triggerBackfill()'>回填24h</button>
   </div>
-  <div id='derivs-wrap' style='display:grid;grid-template-columns:140px 1fr 1fr 1fr;gap:10px;align-items:start'></div>
+  <h3 id='derivs-sym' style='margin:0'></h3>
+  <div id='derivs-wrap' style='display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start'></div>
   <div id='backfill-note' style='color:#888;font-size:12px;margin-top:4px'></div>
 </div>
 <div id='tab-orders' style='display:none'>
@@ -143,17 +144,18 @@ async function load(){
     let pred2=await fetch('/predict/ETHUSDT').then(r=>r.json());
     document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><p style="color:#555;font-size:14px">数据来源:data/holdings_history.json, 信号计算为 ΔBTC/ETH - 0.8·ΔUSDT - 0.4·ΔUSDC</p><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';
   }else if(currentTab==='derivs'){
+    document.getElementById('derivs-sym').textContent=currentSym;
     let wrap=document.getElementById('derivs-wrap');
     if(!wrap.hasChildNodes()){
-      ['Symbol','Funding','Basis','OI'].forEach(h=>{let el=document.createElement('div');el.style.fontWeight='bold';el.style.margin='6px 0';el.textContent=h;wrap.appendChild(el);});
-      let label=document.createElement('div');label.style.fontWeight='bold';label.style.marginTop='10px';label.textContent=currentSym;wrap.appendChild(label);
-      ['funding','basis','oi'].forEach(kind=>{let box=document.createElement('div');box.id='derivs-'+kind;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});
+      ['price','funding','basis','oi'].forEach(kind=>{let box=document.createElement('div');box.id='derivs-'+kind;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});
     }
     let d=await fetch(`/chart/derivs?symbol=${currentSym}`).then(r=>r.json());
     let x=toUTC8(d.timestamps);
+    let p=(d.price||[]).map(v=>Number(v));
     let f=(d.funding||[]).map(v=>Number(v)*100);
     let b=(d.basis||[]).map(v=>Number(v));
     let o=(d.oi||[]).map(v=>Number(v));
+    let dec=symDecimals[currentSym]??2;
     let mk=(id,name,data,axisFmt,color)=>{
       let c=echarts.init(document.getElementById(id));
       c.setOption({
@@ -163,7 +165,8 @@ async function load(){
         series:[{name,showSymbol:false,type:'line',data,lineStyle:{color},itemStyle:{color}}]
       });
     };
-    mk('derivs-funding','Funding (%)',f,v=>Number(v).toFixed(8)+'%','#5470C6');
+    mk('derivs-price','Price (USD)',p,v=>'$'+Number(v).toFixed(dec),'#3BA272');
+    mk('derivs-funding','Funding (%)',f,v=>Number(v).toFixed(4)+'%','#5470C6');
     mk('derivs-basis','Basis (USD)',b,v=>'$'+Number(v).toFixed(2),'#EE6666');
     mk('derivs-oi','Open Interest',o,v=>Number(v).toLocaleString(),'#91CC75');
   }else if(currentTab==='orders'){
