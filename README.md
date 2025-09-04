@@ -20,10 +20,10 @@
 ```bash
 python -m venv mmenv
 # Windows:
-.\mmenv\Scriptsctivate
+.\mmenv\Scripts\activate
 # macOS/Linux:
 # source mmenv/bin/activate
 pip install -r requirements.txt
-uvicorn server:app --reload --host 0.0.0.0 --port 8000
+uvicorn server:app --reload --host 0.0.0.0 --port 8000 --no-use-colors
 ```
 浏览器访问: http://localhost:8000
