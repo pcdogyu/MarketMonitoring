@@ -252,17 +252,35 @@ async function load(){
     let ob=await fetch(`/chart/orders?symbol=${currentSym}&limit=${currentDepth}`).then(r=>r.json());
     let chart=echarts.init(document.getElementById('orders-chart'));
     let dec=symDecimals[currentSym]??2;
-    let priceStr=Number(ob.price).toFixed(dec);
+
+    // Determine best bid/ask and mid price
+    const prices=ob.prices.map(Number);
+    const buys=ob.buy.map(Number);
+    const sells=ob.sell.map(Number);
+    let bestBid=null,bestAsk=null;
+    for(let i=prices.length-1;i>=0;i--){
+      if(buys[i]>0){bestBid=prices[i];break;}
+    }
+    for(let i=0;i<prices.length;i++){
+      if(sells[i]>0){bestAsk=prices[i];break;}
+    }
+    let mid=ob.price;
+    if(bestBid!=null&&bestAsk!=null) mid=(bestBid+bestAsk)/2;
+    else if(bestBid!=null) mid=bestBid;
+    else if(bestAsk!=null) mid=bestAsk;
+    latestPrice=mid;
+    let priceStr=Number(mid).toFixed(dec);
+
     chart.setOption({
       tooltip:{},
       legend:{data:['buy','sell']},
       grid:{left:0,right:0,containLabel:true},
-      xAxis:{type:'category',data:ob.prices.map(p=>Number(p).toFixed(dec)),boundaryGap:false},
+      xAxis:{type:'category',data:prices.map(p=>p.toFixed(dec)),boundaryGap:false},
       yAxis:{type:'value'},
       dataZoom:[{type:'inside'}],
       series:[
-        {name:'buy',data:ob.buy,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
-        {name:'sell',data:ob.sell,type:'bar'}
+        {name:'buy',data:buys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
+        {name:'sell',data:sells,type:'bar'}
       ]
     });
   }else if(currentTab==='trades'){
