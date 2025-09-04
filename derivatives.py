@@ -24,6 +24,8 @@ from typing import Any, Dict, Tuple
 
 import httpx
 
+from db import save_oi_partial, sum_oi_if_complete
+
 
 # Base directory to resolve data paths independent of CWD
 BASE_DIR = Path(__file__).resolve().parent
@@ -128,14 +130,28 @@ async def _okx(symbol: str) -> Tuple[float, float, float]:
         return 0.0, 0.0, 0.0
 
 
-async def fetch_all(symbol: str) -> Dict[str, float]:
-    """Aggregate derivatives metrics for ``symbol`` across all exchanges."""
+async def fetch_all(symbol: str, ts: str) -> Dict[str, float]:
+    """Aggregate derivatives metrics for ``symbol`` across all exchanges.
+
+    ``ts`` is the timestamp assigned by the caller (ISO UTC string).  The
+    function stores per-exchange open-interest values in SQLite and only
+    returns a summed ``oi`` once all three venues have reported.
+    """
 
     results = await asyncio.gather(_binance(symbol), _bybit(symbol), _okx(symbol))
+    names = ["binance", "bybit", "okx"]
 
-    fundings = [r[0] for r in results if r]
-    bases = [r[1] for r in results if r]
-    oi_total = sum(r[2] for r in results if r)
+    fundings, bases = [], []
+    for name, res in zip(names, results):
+        if not res:
+            continue
+        f, b, oi = res
+        fundings.append(f)
+        bases.append(b)
+        if oi > 0:
+            save_oi_partial(symbol, name, oi, ts)
+
+    oi_total = sum_oi_if_complete(symbol) or 0.0
 
     return {
         "symbol": symbol,
