@@ -162,15 +162,20 @@ def append_history(
     try:
         hist = json.loads(path.read_text())
     except Exception:
-        hist = {"funding": [], "basis": [], "oi": [], "timestamps": []}
+        hist = {"funding": [], "basis": [], "oi": [], "price": [], "timestamps": []}
+
+    # ensure all arrays exist for new keys
+    hist.setdefault("price", [])
 
     hist["funding"].append(data["funding"])
     hist["basis"].append(data["basis"])
     hist["oi"].append(data["oi"])
+    # ``price`` may be absent; append None to keep array lengths aligned
+    hist["price"].append(data.get("price"))
     hist["timestamps"].append(data.get("time") or time.strftime("%H:%M", time.gmtime()))
 
     if max_points:
-        for k in ("funding", "basis", "oi", "timestamps"):
+        for k in ("funding", "basis", "oi", "price", "timestamps"):
             hist[k] = hist[k][-max_points:]
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,9 +189,12 @@ def append_history(
 async def backfill(symbol: str, hours: int = 24) -> Dict[str, Any]:
     """Return ``hours`` of history at 5m interval for ``symbol`` using Binance.
 
+    The resulting series include:
+
     - funding: carry-forward of fundingRate points from ``fapi/v1/fundingRate``
     - basis:   markPriceKlines - indexPriceKlines (close values)
     - oi:      futures/data/openInterestHist (5m)
+    - price:   close price from spot ``api/v3/klines``
     """
 
     interval = "5m"
@@ -230,6 +238,20 @@ async def backfill(symbol: str, hours: int = 24) -> Dict[str, Any]:
         except Exception:
             pass
 
+        # Spot price history via klines
+        price_map = {}
+        try:
+            spot = await client.get(
+                "https://api.binance.com/api/v3/klines",
+                params={"symbol": symbol, "interval": interval, "limit": points},
+            )
+            spot.raise_for_status()
+            for it in spot.json():
+                ts = int(it[0]) // 1000  # open time
+                price_map[ts] = float(it[4])  # close price
+        except Exception:
+            pass
+
         # Funding history (point every 8h); carry forward into 5m grid
         funding_points = []
         try:
@@ -270,9 +292,18 @@ async def backfill(symbol: str, hours: int = 24) -> Dict[str, Any]:
     # oi map with default 0
     oi_series = [oi_map.get(ts, 0.0) for ts in ts_list]
 
+    # spot price series aligned to ``ts_list`` (may contain None)
+    price_series = [price_map.get(ts) for ts in ts_list]
+
     # timestamps as ISO UTC
     import time as _t
     iso = [_t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime(t)) for t in ts_list]
 
-    return {"funding": f_series, "basis": basis, "oi": oi_series, "timestamps": iso}
+    return {
+        "funding": f_series,
+        "basis": basis,
+        "oi": oi_series,
+        "price": price_series,
+        "timestamps": iso,
+    }
 
