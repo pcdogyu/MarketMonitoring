@@ -78,6 +78,14 @@ const depthButtons=document.getElementById('depth-buttons');
 const vaPercents=[0.7,0.75,0.8,0.85];
 let currentVA=0.7;
 let latestPrice=0;
+function updateOrdersTitle(){
+  if(currentTab!=='orders') return;
+  const h=document.querySelector('#orders-wrap h3');
+  if(!h) return;
+  const dec=symDecimals[currentSym]??2;
+  const p=Number(latestPrice);
+  h.textContent=`${currentSym} Bids/Asks${p? ' '+p.toFixed(dec):''}`;
+}
 function initSymMenu(){
   if(symMenu.hasChildNodes()) return;
   derivSyms.forEach((s,i)=>{
@@ -183,6 +191,7 @@ async function refreshPrice(){
   try{
     const data=await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${currentSym}`).then(r=>r.json());
     latestPrice=Number(data.price)||0;
+    updateOrdersTitle();
     if(currentTab==='trades'){
       load();
     }
@@ -272,18 +281,27 @@ async function load(){
     else if(bestBid!=null) mid=bestBid;
     else if(bestAsk!=null) mid=bestAsk;
     latestPrice=mid;
+    updateOrdersTitle();
+    const fPrices=[],fBuys=[],fSells=[];
+    for(let i=0;i<prices.length;i++){
+      const p=prices[i];
+      if(latestPrice && Math.abs(p-latestPrice)/latestPrice>0.2) continue;
+      fPrices.push(p);
+      fBuys.push(buys[i]);
+      fSells.push(sells[i]);
+    }
     let priceStr=Number(mid).toFixed(dec);
 
     chart.setOption({
       tooltip:{},
       legend:{data:['buy','sell']},
       grid:{left:0,right:0,containLabel:true},
-      xAxis:{type:'category',data:prices.map(p=>p.toFixed(dec)),boundaryGap:false},
+      xAxis:{type:'category',data:fPrices.map(p=>p.toFixed(dec)),boundaryGap:false},
       yAxis:{type:'value'},
       dataZoom:[{type:'inside'}],
       series:[
-        {name:'buy',data:buys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
-        {name:'sell',data:sells,type:'bar'}
+        {name:'buy',data:fBuys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
+        {name:'sell',data:fSells,type:'bar'}
       ]
     });
   }else if(currentTab==='trades'){
@@ -385,7 +403,7 @@ async function load(){
   }
 }
 setInterval(load,5000);
-setInterval(refreshPrice,60000);
+setInterval(refreshPrice,15000);
 refreshPrice().then(load);
 
 async function triggerBackfill(hours,btn){
