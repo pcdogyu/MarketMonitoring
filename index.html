@@ -181,10 +181,10 @@ async function load(){
   if(currentTab==='holdings'){
     let snap=await fetch('/mm/holdings').then(r=>r.json());
     let bar=echarts.init(document.getElementById('holdings-bar'));
-    bar.setOption({title:{text:'最近快照'},xAxis:{type:'category',data:Object.keys(snap.totals)},yAxis:{type:'value'},series:[{data:Object.values(snap.totals),type:'bar'}]});
+    bar.setOption({title:{text:'最近快照'},xAxis:{type:'category',data:Object.keys(snap.totals)},yAxis:{type:'value'},dataZoom:[{type:'inside'}],series:[{data:Object.values(snap.totals),type:'bar'}]});
     let hist=await fetch('/chart/holdings').then(r=>r.json());
     let line=echarts.init(document.getElementById('holdings-line'));
-    line.setOption({tooltip:{trigger:'axis'},legend:{data:['BTC','ETH','USDT','USDC']},xAxis:{type:'category',data:hist.time},yAxis:{type:'value'},series:[{name:'BTC',type:'line',data:hist.BTC},{name:'ETH',type:'line',data:hist.ETH},{name:'USDT',type:'line',data:hist.USDT},{name:'USDC',type:'line',data:hist.USDC}]});
+    line.setOption({tooltip:{trigger:'axis'},legend:{data:['BTC','ETH','USDT','USDC']},xAxis:{type:'category',data:hist.time},yAxis:{type:'value'},dataZoom:[{type:'inside'}],series:[{name:'BTC',type:'line',data:hist.BTC},{name:'ETH',type:'line',data:hist.ETH},{name:'USDT',type:'line',data:hist.USDT},{name:'USDC',type:'line',data:hist.USDC}]});
   }else if(currentTab==='predict'){
     let pred1=await fetch('/predict/BTCUSDT').then(r=>r.json());
     let pred2=await fetch('/predict/ETHUSDT').then(r=>r.json());
@@ -223,6 +223,7 @@ async function load(){
         tooltip:{trigger:'axis',formatter:(ps)=>{let p=ps[0];return p.axisValueLabel+'<br/>'+name+': '+axisFmt(p.data);}},
         xAxis:{type:'category',data:x},
         yAxis,
+        dataZoom:[{type:'inside'}],
         series:[{name,showSymbol:false,type:'line',data,connectNulls:true,lineStyle:{color},itemStyle:{color}}]
       });
     };
@@ -248,6 +249,7 @@ async function load(){
       grid:{left:0,right:0,containLabel:true},
       xAxis:{type:'category',data:ob.prices.map(p=>Number(p).toFixed(dec)),boundaryGap:false},
       yAxis:{type:'value'},
+      dataZoom:[{type:'inside'}],
       series:[
         {name:'buy',data:ob.buy,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
         {name:'sell',data:ob.sell,type:'bar'}
@@ -326,6 +328,7 @@ async function load(){
         grid:{left:60,right:20,top:20,bottom:20},
         xAxis:{type:'value'},
         yAxis:{type:'category',data:displayLabels},
+        dataZoom:[{type:'inside',yAxisIndex:0}],
         series:[seriesOpt]
       });
     }else{
@@ -341,7 +344,7 @@ async function load(){
     let d=await fetch(`/chart/cancels?symbol=${currentSym}`).then(r=>r.json());
     let chart=echarts.init(document.getElementById('cancels-line'));
     let x=toUTC8(d.timestamps);
-    chart.setOption({tooltip:{trigger:'axis'},xAxis:{type:'category',data:x},yAxis:{type:'value'},series:[{data:d.counts,type:'line'}]});
+    chart.setOption({tooltip:{trigger:'axis'},xAxis:{type:'category',data:x},yAxis:{type:'value'},dataZoom:[{type:'inside'}],series:[{data:d.counts,type:'line'}]});
   }
 }
 setInterval(load,5000);load();
