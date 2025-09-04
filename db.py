@@ -47,6 +47,17 @@ def init_db() -> None:
             )
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS trade_volumes (
+              symbol TEXT NOT NULL,
+              date TEXT NOT NULL,
+              price REAL NOT NULL,
+              volume REAL NOT NULL,
+              PRIMARY KEY(symbol,date,price)
+            )
+            """
+        )
         cur.execute("CREATE INDEX IF NOT EXISTS idx_derivs_sym_ts ON derivs(symbol, ts)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_prices_sym_ts ON prices(symbol, ts)")
         cur.execute(
@@ -111,6 +122,32 @@ def save_cex_holdings(snapshot: Dict[str, Any]) -> None:
                 ),
             )
         con.commit()
+
+
+def save_trade_volumes(symbol: str, date: str, volumes: Dict[float, float]) -> None:
+    """Persist aggregated trade volumes for a symbol on a given date."""
+
+    with sqlite3.connect(DB_PATH) as con:
+        cur = con.cursor()
+        for price, vol in volumes.items():
+            cur.execute(
+                "INSERT OR REPLACE INTO trade_volumes(symbol,date,price,volume) VALUES (?,?,?,?)",
+                (symbol, date, float(price), float(vol)),
+            )
+        con.commit()
+
+
+def query_trade_volumes(symbol: str, date: str) -> Dict[float, float]:
+    """Load cached trade volume profile for ``symbol`` on ``date``."""
+
+    with sqlite3.connect(DB_PATH) as con:
+        cur = con.cursor()
+        cur.execute(
+            "SELECT price,volume FROM trade_volumes WHERE symbol=? AND date=?",
+            (symbol, date),
+        )
+        rows = cur.fetchall()
+    return {float(r[0]): float(r[1]) for r in rows}
 
 
 def query_derivs(symbol: str, since_seconds: int | None = None) -> Dict[str, Any]:
