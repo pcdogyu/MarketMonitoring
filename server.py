@@ -439,13 +439,16 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
         def filt(arr):
             return [v for v, keep in zip(arr, xs) if keep]
 
+        p_series = filt(data.get("price", []))
         result = {
             "funding": filt(data.get("funding", [])),
             "basis": filt(data.get("basis", [])),
             "oi": filt(data.get("oi", [])),
             "timestamps": [t for t, keep in zip(data.get("timestamps", []), xs) if keep],
         }
-        result["price"] = [price_map.get(t) for t in result["timestamps"]]
+        if len(p_series) < len(result["timestamps"]):
+            p_series.extend([None] * (len(result["timestamps"]) - len(p_series)))
+        result["price"] = [price_map.get(t, p) for t, p in zip(result["timestamps"], p_series)]
         return result
     except Exception:
         return {"funding": [], "basis": [], "oi": [], "price": [], "timestamps": []}
@@ -463,12 +466,24 @@ async def backfill_derivs(hours: int = 24) -> Dict[str, Any]:
         try:
             series = await derivs_backfill(s, hours)
             n = 0
-            for t, f, b, o in zip(series["timestamps"], series["funding"], series["basis"], series["oi"]):
-                payload = {"funding": f, "basis": b, "oi": o, "time": t}
+            prices = series.get("price", [None] * len(series.get("timestamps", [])))
+            for t, f, b, o, p in zip(
+                series.get("timestamps", []),
+                series.get("funding", []),
+                series.get("basis", []),
+                series.get("oi", []),
+                prices,
+            ):
+                payload = {"funding": f, "basis": b, "oi": o, "time": t, "price": p}
                 try:
                     db_save_derivs(s, payload)
                 except Exception:
                     pass
+                if p is not None:
+                    try:
+                        db_save_price(s, t, p)
+                    except Exception:
+                        pass
                 append_deriv_history(s, {**payload, "symbol": s}, BASE_DIR / "data")
                 n += 1
             results[s] = n
