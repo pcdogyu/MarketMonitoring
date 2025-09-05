@@ -386,7 +386,7 @@ async function load(){
     const threshold=currentFilter;
     for(let i=0;i<prices.length;i++){
       const p=prices[i];
-      if(Math.abs(p-refPrice)/refPrice>0.1) continue;
+      // Show full depth without restricting to ±10% around the reference price
       fPrices.push(p);
       const bq=buys[i];
       const sq=sells[i];
