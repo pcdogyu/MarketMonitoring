@@ -381,13 +381,18 @@ async def _startup() -> None:
     # here we guarantee that the historical data is populated on startup,
     # allowing the front‑end charts to immediately display a full 24‑hour
     # window.
+    # Backfill derivatives data, but avoid blocking startup indefinitely if
+    # the upstream APIs are slow or unreachable.  ``asyncio.wait_for`` limits
+    # the operation to roughly half a minute; in the event of a timeout or any
+    # other error the regular refresh loop will gradually populate the data.
     try:
-        await _maybe_backfill_24h()
+        await asyncio.wait_for(_maybe_backfill_24h(), timeout=30)
     except Exception:
-        # Ignore backfill errors – regular refresh will still populate data
+        # Ignore backfill errors or timeouts – regular refresh will still
+        # populate data over time
         pass
 
-    # Start background refresh loop after backfill completes
+    # Start background refresh loop after backfill completes or times out
     asyncio.create_task(_refresh_loop())
     asyncio.create_task(_cleanup_loop())
     if websockets is not None:
