@@ -89,8 +89,8 @@ function updateOrdersTitle(){
   if(currentTab!=='orders') return;
   const h=document.querySelector('#orders-wrap h3');
   if(!h) return;
-  const dec=symDecimals[currentSym]??2;
   const p=Number(latestPrice);
+  const dec=p && p<1?6:(symDecimals[currentSym]??2);
   h.textContent=`${displaySym(currentSym)} Bids/Asks${p? ' '+p.toFixed(dec):''}`;
 }
 function initSymMenu(){
@@ -309,7 +309,6 @@ async function load(){
       });
     }
     let chart=ordersChart;
-    let dec=symDecimals[currentSym]??2;
 
     // Determine best bid/ask and mid price
     const prices=ob.prices.map(Number);
@@ -328,6 +327,7 @@ async function load(){
     else if(bestAsk!=null) mid=bestAsk;
     updateOrdersTitle();
     const refPrice=latestPrice||mid;
+    const dec=refPrice<1?6:(symDecimals[currentSym]??2);
     const fPrices=[],fBuys=[],fSells=[];
     for(let i=0;i<prices.length;i++){
       const p=prices[i];
@@ -362,11 +362,11 @@ async function load(){
       tooltip:{},
       legend:{data:['buy','sell']},
       grid:{left:0,right:0,containLabel:true},
-      xAxis:{type:'category',data:axisVals,boundaryGap:false},
-      yAxis:{type:'value'},
-      dataZoom:[{type:'inside',startValue:startVal,endValue:endVal}],
+      xAxis:{type:'value'},
+      yAxis:{type:'category',data:axisVals,inverse:true},
+      dataZoom:[{type:'inside',yAxisIndex:0,startValue:startVal,endValue:endVal}],
       series:[
-        {name:'buy',data:fBuys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
+        {name:'buy',data:fBuys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{yAxis:priceStr}]}},
         {name:'sell',data:fSells,type:'bar'}
       ]
     });
