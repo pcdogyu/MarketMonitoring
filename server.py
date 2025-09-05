@@ -551,12 +551,14 @@ def predict(symbol: str) -> Dict[str, Any]:
 
 
 @app.get("/chart/derivs")
-def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
+async def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
     """Return derivatives history for ``symbol``.
 
     Optional query ``window`` restricts the time range (e.g. "5m", "1h").
-    If omitted, the server returns the last 24 hours.  The server prefers
-    SQLite when available, falling back to JSON history.
+    The handler first attempts to load history from SQLite.  When the
+    requested window is missing, it asynchronously backfills data from
+    Binance and stores the result in the database before returning it.  If
+    both steps fail, the function falls back to the JSON history file.
     """
 
     def _parse_window(w: str | None) -> int:
@@ -628,6 +630,32 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
                 ):
                     data[k] = [None] * len(data["timestamps"])
             return data
+    except Exception:
+        pass
+
+    # No DB history – asynchronously backfill and persist
+    try:
+        hours = max(1, secs // 3600)
+        series = await derivs_backfill(symbol.upper(), hours)
+        for f, b, o, ts, pr in zip(
+            series["funding"],
+            series["basis"],
+            series["oi"],
+            series["timestamps"],
+            series["price"],
+        ):
+            db_save_derivs(symbol.upper(), {"time": ts, "funding": f, "basis": b, "oi": o})
+            if pr is not None:
+                db_save_price(symbol.upper(), ts, pr)
+        series["oi_binance"] = series["oi"]
+        series["oi_bybit"] = [None] * len(series["oi"])
+        series["oi_okx"] = [None] * len(series["oi"])
+        try:
+            path = BASE_DIR / "data" / f"derivs_{symbol.upper()}.json"
+            path.write_text(json.dumps(series))
+        except Exception:
+            pass
+        return series
     except Exception:
         pass
 
