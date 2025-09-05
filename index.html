@@ -93,6 +93,34 @@ function updateOrdersTitle(){
   const dec=p && p<1?6:(symDecimals[currentSym]??2);
   h.textContent=`${displaySym(currentSym)} Bids/Asks${p? ' '+p.toFixed(dec):''}`;
 }
+function renderOrdersList(ob){
+  const list=document.getElementById('orders-list');
+  if(!list) return;
+  const prices=ob.prices.map(Number);
+  const buys=ob.buy.map(Number);
+  const sells=ob.sell.map(Number);
+  const dec=symDecimals[currentSym]??2;
+  const buyLevels=[];
+  const sellLevels=[];
+  for(let i=0;i<prices.length;i++){
+    if(buys[i]>0) buyLevels.push({p:prices[i],q:buys[i]});
+    if(sells[i]>0) sellLevels.push({p:prices[i],q:sells[i]});
+  }
+  buyLevels.sort((a,b)=>b.p-a.p);
+  sellLevels.sort((a,b)=>a.p-b.p);
+  const top=20;
+  let buyHtml='<div style="flex:1"><h4>Buy</h4>';
+  buyLevels.slice(0,top).forEach(l=>{
+    buyHtml+=`<div style="display:flex;gap:4px;justify-content:space-between"><span>${l.p.toFixed(dec)}</span><span>${l.q.toFixed(2)}</span></div>`;
+  });
+  buyHtml+='</div>';
+  let sellHtml='<div style="flex:1"><h4>Sell</h4>';
+  sellLevels.slice(0,top).forEach(l=>{
+    sellHtml+=`<div style="display:flex;gap:4px;justify-content:space-between"><span>${l.p.toFixed(dec)}</span><span>${l.q.toFixed(2)}</span></div>`;
+  });
+  sellHtml+='</div>';
+  list.innerHTML=buyHtml+sellHtml;
+}
 function initSymMenu(){
   if(symMenu.hasChildNodes()) return;
   derivSyms.forEach((s,i)=>{
@@ -296,7 +324,7 @@ async function load(){
     initDepthButtons();
     let wrap=document.getElementById('orders-wrap');
     if(!wrap.hasChildNodes()){
-      wrap.innerHTML=`<h3>${displaySym(currentSym)} Bids/Asks</h3><div id='orders-chart' style='width:100%;height:600px;border:1px solid #ccc'></div>`;
+      wrap.innerHTML=`<h3>${displaySym(currentSym)} Bids/Asks</h3><div id='orders-content' style='display:flex;gap:10px;align-items:flex-start'><div id='orders-chart' style='flex:1;height:600px;border:1px solid #ccc'></div><div id='orders-list' style='flex:1;display:flex;gap:20px;justify-content:space-between'></div></div>`;
     }else{
       wrap.querySelector('h3').textContent=`${displaySym(currentSym)} Bids/Asks`;
     }
@@ -370,6 +398,7 @@ async function load(){
         {name:'sell',data:fSells,type:'bar'}
       ]
     });
+    renderOrdersList(ob);
   }else if(currentTab==='trades'){
     let wrap=document.getElementById('trades-wrap');
     if(!wrap.hasChildNodes()){
