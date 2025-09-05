@@ -1,0 +1,9 @@
+{
+  "exchanges": {
+    "binance": {
+      "api_key": "F4bZyVxQ3KoUD5d5eP3b19WhyHtTzce7TgpsUDHsiATrnTn0sxWZayGIHhI5j9oJ",
+      "secret": "UjLP82tT5S3w0AZKKjTm7hhK1i4O0Ivj5hqJRyPfQsT9TKVvZf8xTG0UQl1ha1EH",
+      "api_base": "https://api.binance.com"
+    }
+  }
+}
