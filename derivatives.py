@@ -145,6 +145,7 @@ async def fetch_all(symbol: str, ts: str) -> Dict[str, float]:
 
     fundings, bases = [], []
     funding_map: Dict[str, float] = {}
+    oi_map: Dict[str, float] = {}
     for name, res in results.items():
         if not res:
             continue
@@ -152,6 +153,7 @@ async def fetch_all(symbol: str, ts: str) -> Dict[str, float]:
         funding_map[f"funding_{name}"] = f
         fundings.append(f)
         bases.append(b)
+        oi_map[f"oi_{name}"] = oi
         if oi > 0:
             save_oi_partial(symbol, name, oi, ts)
 
@@ -163,6 +165,7 @@ async def fetch_all(symbol: str, ts: str) -> Dict[str, float]:
         "basis": sum(bases) / len(bases) if bases else 0.0,
         "oi": oi_total,
         **funding_map,
+        **oi_map,
     }
 
 
@@ -183,10 +186,27 @@ def append_history(
     try:
         hist = json.loads(path.read_text())
     except Exception:
-        hist = {"funding": [], "basis": [], "oi": [], "price": [], "timestamps": []}
+        hist = {
+            "funding": [],
+            "basis": [],
+            "oi": [],
+            "price": [],
+            "timestamps": [],
+            "oi_binance": [],
+            "oi_bybit": [],
+            "oi_okx": [],
+        }
 
     # ensure all arrays exist for new keys
-    for k in ("price", "funding_binance", "funding_bybit", "funding_okx"):
+    for k in (
+        "price",
+        "funding_binance",
+        "funding_bybit",
+        "funding_okx",
+        "oi_binance",
+        "oi_bybit",
+        "oi_okx",
+    ):
         hist.setdefault(k, [])
 
     hist["funding"].append(data["funding"])
@@ -195,6 +215,9 @@ def append_history(
     hist["funding_binance"].append(data.get("funding_binance"))
     hist["funding_bybit"].append(data.get("funding_bybit"))
     hist["funding_okx"].append(data.get("funding_okx"))
+    hist["oi_binance"].append(data.get("oi_binance"))
+    hist["oi_bybit"].append(data.get("oi_bybit"))
+    hist["oi_okx"].append(data.get("oi_okx"))
     # ``price`` may be absent; append None to keep array lengths aligned
     hist["price"].append(data.get("price"))
     hist["timestamps"].append(data.get("time") or time.strftime("%H:%M", time.gmtime()))
@@ -209,6 +232,9 @@ def append_history(
             "funding_binance",
             "funding_bybit",
             "funding_okx",
+            "oi_binance",
+            "oi_bybit",
+            "oi_okx",
         ):
             hist[k] = hist[k][-max_points:]
 

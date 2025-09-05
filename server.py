@@ -592,19 +592,40 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
         data = db_query_derivs(symbol.upper(), secs)
         if data["timestamps"]:
             data["price"] = [price_map.get(t) for t in data["timestamps"]]
-            # enrich with per-exchange funding from JSON history
+            # enrich with per-exchange funding and open interest from JSON history
             try:
                 j = json.loads(
                     (BASE_DIR / "data" / f"derivs_{symbol.upper()}.json").read_text()
                 )
                 fmap = {
                     k: dict(zip(j.get("timestamps", []), j.get(k, [])))
-                    for k in ("funding_binance", "funding_bybit", "funding_okx")
+                    for k in (
+                        "funding_binance",
+                        "funding_bybit",
+                        "funding_okx",
+                        "oi_binance",
+                        "oi_bybit",
+                        "oi_okx",
+                    )
                 }
-                for k in ("funding_binance", "funding_bybit", "funding_okx"):
+                for k in (
+                    "funding_binance",
+                    "funding_bybit",
+                    "funding_okx",
+                    "oi_binance",
+                    "oi_bybit",
+                    "oi_okx",
+                ):
                     data[k] = [fmap[k].get(t) for t in data["timestamps"]]
             except Exception:
-                for k in ("funding_binance", "funding_bybit", "funding_okx"):
+                for k in (
+                    "funding_binance",
+                    "funding_bybit",
+                    "funding_okx",
+                    "oi_binance",
+                    "oi_bybit",
+                    "oi_okx",
+                ):
                     data[k] = [None] * len(data["timestamps"])
             return data
     except Exception:
@@ -662,6 +683,9 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
             "funding_okx": filt(data.get("funding_okx", []), skip_zero=True),
             "basis": filt(data.get("basis", []), skip_zero=True),
             "oi": filt(data.get("oi", []), skip_zero=True),
+            "oi_binance": filt(data.get("oi_binance", []), skip_zero=True),
+            "oi_bybit": filt(data.get("oi_bybit", []), skip_zero=True),
+            "oi_okx": filt(data.get("oi_okx", []), skip_zero=True),
             "timestamps": [t for t, keep in zip(data.get("timestamps", []), xs) if keep],
         }
         if len(p_series) < len(result["timestamps"]):
@@ -678,6 +702,9 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
                 "funding_okx": [],
                 "basis": [],
                 "oi": [],
+                "oi_binance": [],
+                "oi_bybit": [],
+                "oi_okx": [],
                 "price": [price_map[t] for t in ts_sorted],
                 "timestamps": ts_sorted,
             }
@@ -692,6 +719,9 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
                 "funding_okx": [],
                 "basis": [],
                 "oi": [],
+                "oi_binance": [],
+                "oi_bybit": [],
+                "oi_okx": [],
                 "price": [price_map[t] for t in ts_sorted],
                 "timestamps": ts_sorted,
             }
@@ -702,6 +732,9 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
             "funding_okx": [],
             "basis": [],
             "oi": [],
+            "oi_binance": [],
+            "oi_bybit": [],
+            "oi_okx": [],
             "price": [],
             "timestamps": [],
         }
