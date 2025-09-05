@@ -1,3 +1,6 @@
 /mmenv/
 __pycache__/
 *.pyc
+
+data/exchange_holdings_history.json
+data/holdings_history.json
