@@ -15,6 +15,7 @@
   <button class='menu top' onclick="showTab('orders',this)">挂单</button>
   <button class='menu top' onclick="showTab('trades',this)">成交</button>
   <button class='menu top' onclick="showTab('cancels',this)">取消</button>
+  <button class='menu top' onclick="showTab('liqs',this)">清算</button>
   <button class='menu top' onclick="showTab('settings',this)">设置</button>
 </div>
 <div id='sym-menu' style='display:none;gap:8px;flex-wrap:wrap;margin-top:8px'></div>
@@ -49,6 +50,9 @@
 </div>
 <div id='tab-cancels' style='display:none'>
   <div id='cancels-wrap' style='margin-top:10px;width:100%'></div>
+</div>
+<div id='tab-liqs' style='display:none'>
+  <div id='liqs-wrap' style='margin-top:10px;width:100%'></div>
 </div>
 <div id='tab-settings' style='display:none'>
   <h3>系统设置</h3>
@@ -85,6 +89,7 @@ const windowButtons=document.getElementById('window-buttons');
 let latestPrice=0;
 let ordersChart=null;
 const ordersZoom={};
+let lastLiqFetch=0;
 function updateOrdersTitle(){
   if(currentTab!=='orders') return;
   const h=document.querySelector('#orders-wrap h3');
@@ -195,6 +200,7 @@ async function showSym(sym,btn){
   if(currentTab==='orders'){document.getElementById('orders-wrap').innerHTML='';ordersChart=null;}
   if(currentTab==='trades') document.getElementById('trades-wrap').innerHTML='';
   if(currentTab==='cancels') document.getElementById('cancels-wrap').innerHTML='';
+  if(currentTab==='liqs'){document.getElementById('liqs-wrap').innerHTML='';lastLiqFetch=0;}
   await refreshPrice();
   load();
 }
@@ -206,15 +212,17 @@ function showTab(tab,btn){
   document.getElementById('tab-orders').style.display=(tab==='orders')?'block':'none';
   document.getElementById('tab-trades').style.display=(tab==='trades')?'block':'none';
   document.getElementById('tab-cancels').style.display=(tab==='cancels')?'block':'none';
+  document.getElementById('tab-liqs').style.display=(tab==='liqs')?'block':'none';
   document.getElementById('tab-settings').style.display=(tab==='settings')?'block':'none';
   document.querySelectorAll('.menu.top').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
-  const needsSym=['derivs','orders','trades','cancels'].includes(tab);
+  const needsSym=['derivs','orders','trades','cancels','liqs'].includes(tab);
   symMenu.style.display=needsSym?'flex':'none';
   if(needsSym) initSymMenu();
   if(tab==='orders') initDepthButtons();
   if(tab==='derivs') initWindowButtons();
   if(tab==='settings') loadSettings();
+  if(tab==='liqs') lastLiqFetch=0;
   load();
 }
 async function loadSettings(){
@@ -484,8 +492,22 @@ async function load(){
     }else{
       tc.clear();
     }
+  }else if(currentTab==='liqs'){
+      let wrap=document.getElementById('liqs-wrap');
+      if(!wrap.hasChildNodes()){
+        wrap.innerHTML=`<h3>${displaySym(currentSym)}</h3><div id='liqs-chart' style='width:100%;height:80vh;border:1px solid #ccc'></div>`;
+      }else{
+        wrap.querySelector('h3').textContent=displaySym(currentSym);
+      }
+      const now=Date.now();
+      if(now-lastLiqFetch<60000) return;
+      lastLiqFetch=now;
+      let d=await fetch(`/chart/liquidations?symbol=${currentSym}`).then(r=>r.json());
+      let prices=d.prices.map(p=>p.toString());
+      let chart=echarts.init(document.getElementById('liqs-chart'));
+      chart.setOption({tooltip:{},xAxis:{type:'category',data:prices},yAxis:{type:'value'},series:[{type:'bar',data:d.volumes}]});
   }else if(currentTab==='cancels'){
-    let wrap=document.getElementById('cancels-wrap');
+      let wrap=document.getElementById('cancels-wrap');
     if(!wrap.hasChildNodes()){
       wrap.innerHTML=`<h3>${displaySym(currentSym)}</h3><div id='cancels-line' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>`;
     }else{
