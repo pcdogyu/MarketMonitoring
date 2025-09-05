@@ -77,6 +77,8 @@ const symMenu=document.getElementById('sym-menu');
 const depthLevels=[500,1000,5000];
 let currentDepth=500;
 const depthButtons=document.getElementById('depth-buttons');
+const filterLevels=[0,500,1000,2000,3000,5000,10000];
+let currentFilter=0;
 const vaPercents=[0.7,0.75,0.8,0.85];
 let currentVA=0.7;
 const windowOptions=['5m','15m','30m','1h','4h','12h','24h'];
@@ -103,8 +105,8 @@ function renderOrdersList(ob){
   const buyLevels=[];
   const sellLevels=[];
   for(let i=0;i<prices.length;i++){
-    if(buys[i]>0) buyLevels.push({p:prices[i],q:buys[i]});
-    if(sells[i]>0) sellLevels.push({p:prices[i],q:sells[i]});
+    if(buys[i]>=currentFilter) buyLevels.push({p:prices[i],q:buys[i]});
+    if(sells[i]>=currentFilter) sellLevels.push({p:prices[i],q:sells[i]});
   }
   buyLevels.sort((a,b)=>b.p-a.p);
   sellLevels.sort((a,b)=>a.p-b.p);
@@ -140,14 +142,30 @@ function initDepthButtons(){
   depthLevels.forEach(d=>{
     let b=document.createElement('button');
     b.textContent=d;
-    b.className='menu';
+    b.className='menu depth';
     if(d===currentDepth) b.classList.add('active');
     b.onclick=()=>{
       currentDepth=d;
-      depthButtons.querySelectorAll('.menu').forEach(x=>x.classList.remove('active'));
+      depthButtons.querySelectorAll('.menu.depth').forEach(x=>x.classList.remove('active'));
       b.classList.add('active');
       document.getElementById('orders-wrap').innerHTML='';
       ordersChart=null;
+      load();
+    };
+    depthButtons.appendChild(b);
+  });
+  let fLabel=document.createElement('span');
+  fLabel.textContent='过滤';
+  depthButtons.appendChild(fLabel);
+  filterLevels.forEach(d=>{
+    let b=document.createElement('button');
+    b.textContent=d;
+    b.className='menu filter';
+    if(d===currentFilter) b.classList.add('active');
+    b.onclick=()=>{
+      currentFilter=d;
+      depthButtons.querySelectorAll('.menu.filter').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
       load();
     };
     depthButtons.appendChild(b);
@@ -344,10 +362,10 @@ async function load(){
     const sells=ob.sell.map(Number);
     let bestBid=null,bestAsk=null;
     for(let i=prices.length-1;i>=0;i--){
-      if(buys[i]>0){bestBid=prices[i];break;}
+      if(buys[i]>=currentFilter){bestBid=prices[i];break;}
     }
     for(let i=0;i<prices.length;i++){
-      if(sells[i]>0){bestAsk=prices[i];break;}
+      if(sells[i]>=currentFilter){bestAsk=prices[i];break;}
     }
     let mid=ob.price;
     if(bestBid!=null&&bestAsk!=null) mid=(bestBid+bestAsk)/2;
@@ -357,12 +375,15 @@ async function load(){
     const refPrice=latestPrice||mid;
     const dec=refPrice<1?6:(symDecimals[currentSym]??2);
     const fPrices=[],fBuys=[],fSells=[];
+    const threshold=currentFilter;
     for(let i=0;i<prices.length;i++){
       const p=prices[i];
       if(Math.abs(p-refPrice)/refPrice>0.1) continue;
       fPrices.push(p);
-      fBuys.push(buys[i]);
-      fSells.push(sells[i]);
+      const bq=buys[i];
+      const sq=sells[i];
+      fBuys.push(bq>=threshold?bq:0);
+      fSells.push(sq>=threshold?sq:0);
     }
     const linePrice=refPrice;
     let priceStr=Number(linePrice).toFixed(dec);
