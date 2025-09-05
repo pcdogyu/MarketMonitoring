@@ -122,19 +122,16 @@ async def fetch(symbol: str, limit: int = 100) -> Dict[str, Any]:
         mid = asks0[0][0]
     else:
         mid = 1.0
-    exp = math.floor(math.log10(mid)) if mid > 0 else 0
-    special_decimals = {
-        "XRPUSDT": 5,
-        "XLMUSDT": 4,
-        "DOGEUSDT": 4,
-        "SUIUSDT": 4,
-        "PEPEUSDT": 8,
-        "1000PEPEUSDT": 7,
-        "PUMPUSDT": 6,
-        "FARTCOINUSDT": 4,
-        "WLFIUSDT": 4,
-    }
-    decimals = special_decimals.get(symbol.upper(), max(2, 2 - exp))
+    def _decimals(price: float) -> int:
+        if price < 1:
+            return 6
+        if price < 100:
+            return 2
+        if price < 1000:
+            return 1
+        return 2
+
+    decimals = _decimals(mid)
     interval = max(mid * 0.0001, 10 ** (-decimals))
 
     from collections import defaultdict

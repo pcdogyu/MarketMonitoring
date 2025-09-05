@@ -1,1 +1,3 @@
 /mmenv/
+__pycache__/
+*.pyc

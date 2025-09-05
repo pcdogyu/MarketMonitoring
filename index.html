@@ -60,17 +60,12 @@
 <script>
 const derivSyms=__SYMS__;
 function displaySym(s){return s.replace(/USDT$/,'');}
-const symDecimals={
-  'XRPUSDT':5,
-  'XLMUSDT':4,
-  'DOGEUSDT':4,
-  'SUIUSDT':4,
-  'PEPEUSDT':8,
-  '1000PEPEUSDT':7,
-  'PUMPUSDT':6,
-  'FARTCOINUSDT':4,
-  'WLFIUSDT':4
-};
+function getDecimals(price){
+  if(price<1) return 6;
+  if(price<100) return 2;
+  if(price<1000) return 1;
+  return 2;
+}
 let currentSym=derivSyms[0];
 let currentTab='holdings';
 const symMenu=document.getElementById('sym-menu');
@@ -89,7 +84,7 @@ function updateOrdersTitle(){
   if(currentTab!=='orders') return;
   const h=document.querySelector('#orders-wrap h3');
   if(!h) return;
-  const dec=symDecimals[currentSym]??2;
+  const dec=getDecimals(Number(latestPrice));
   const p=Number(latestPrice);
   h.textContent=`${displaySym(currentSym)} Bids/Asks${p? ' '+p.toFixed(dec):''}`;
 }
@@ -260,7 +255,7 @@ async function load(){
     let fok=toSeries(d.funding_okx,v=>v*100);
     let b=toSeries(d.basis);
     let o=toSeries(d.oi);
-    let dec=symDecimals[currentSym]??2;
+    let dec=getDecimals(Number(latestPrice || (d.price?.[0] ?? 0)));
     let mk=(id,name,data,axisFmt,color,autoScale=false,desc='')=>{
       let c=echarts.init(document.getElementById(id));
       let yAxis={type:'value',name:name,axisLabel:{formatter:(val)=>axisFmt(val)}};
@@ -307,7 +302,7 @@ async function load(){
       });
     }
     let chart=ordersChart;
-    let dec=symDecimals[currentSym]??2;
+    let dec=getDecimals(latestPrice || ob.price);
 
     // Determine best bid/ask and mid price
     const prices=ob.prices.map(Number);
@@ -359,12 +354,12 @@ async function load(){
     chart.setOption({
       tooltip:{},
       legend:{data:['buy','sell']},
-      grid:{left:0,right:0,containLabel:true},
-      xAxis:{type:'category',data:axisVals,boundaryGap:false},
-      yAxis:{type:'value'},
-      dataZoom:[{type:'inside',startValue:startVal,endValue:endVal}],
+      grid:{left:60,right:0,containLabel:true},
+      xAxis:{type:'value'},
+      yAxis:{type:'category',data:axisVals,inverse:true},
+      dataZoom:[{type:'inside',yAxisIndex:0,startValue:startVal,endValue:endVal}],
       series:[
-        {name:'buy',data:fBuys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
+        {name:'buy',data:fBuys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{yAxis:priceStr}]}},
         {name:'sell',data:fSells,type:'bar'}
       ]
     });
@@ -467,7 +462,7 @@ async function load(){
   }
 }
 setInterval(load,5000);
-setInterval(refreshPrice,5000);
+setInterval(refreshPrice,1000);
 refreshPrice().then(load);
 
 async function triggerBackfill(hours,btn){
