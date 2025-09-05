@@ -351,14 +351,26 @@ async def _maybe_backfill_24h() -> None:
             continue
         try:
             series = await derivs_backfill(s)
-            for t, f, b, o, p in zip(
+            for t, f, b, o, p, fb, fby, fokx in zip(
                 series["timestamps"],
                 series["funding"],
                 series["basis"],
                 series["oi"],
                 series.get("price", []),
+                series.get("funding_binance", []),
+                series.get("funding_bybit", []),
+                series.get("funding_okx", []),
             ):
-                payload = {"funding": f, "basis": b, "oi": o, "price": p, "time": t}
+                payload = {
+                    "funding": f,
+                    "basis": b,
+                    "oi": o,
+                    "price": p,
+                    "time": t,
+                    "funding_binance": fb,
+                    "funding_bybit": fby,
+                    "funding_okx": fokx,
+                }
                 try:
                     db_save_derivs(s, payload)
                 except Exception:
@@ -513,6 +525,20 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
         data = db_query_derivs(symbol.upper(), secs)
         if data["timestamps"]:
             data["price"] = [price_map.get(t) for t in data["timestamps"]]
+            # enrich with per-exchange funding from JSON history
+            try:
+                j = json.loads(
+                    (BASE_DIR / "data" / f"derivs_{symbol.upper()}.json").read_text()
+                )
+                fmap = {
+                    k: dict(zip(j.get("timestamps", []), j.get(k, [])))
+                    for k in ("funding_binance", "funding_bybit", "funding_okx")
+                }
+                for k in ("funding_binance", "funding_bybit", "funding_okx"):
+                    data[k] = [fmap[k].get(t) for t in data["timestamps"]]
+            except Exception:
+                for k in ("funding_binance", "funding_bybit", "funding_okx"):
+                    data[k] = [None] * len(data["timestamps"])
             return data
     except Exception:
         pass
@@ -564,6 +590,9 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
         p_series = filt(data.get("price", []), skip_zero=True)
         result = {
             "funding": filt(data.get("funding", []), skip_zero=True),
+            "funding_binance": filt(data.get("funding_binance", []), skip_zero=True),
+            "funding_bybit": filt(data.get("funding_bybit", []), skip_zero=True),
+            "funding_okx": filt(data.get("funding_okx", []), skip_zero=True),
             "basis": filt(data.get("basis", []), skip_zero=True),
             "oi": filt(data.get("oi", []), skip_zero=True),
             "timestamps": [t for t, keep in zip(data.get("timestamps", []), xs) if keep],
@@ -577,6 +606,9 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
             ts_sorted = sorted(price_map.keys())
             return {
                 "funding": [],
+                "funding_binance": [],
+                "funding_bybit": [],
+                "funding_okx": [],
                 "basis": [],
                 "oi": [],
                 "price": [price_map[t] for t in ts_sorted],
@@ -588,12 +620,24 @@ def chart_derivs(symbol: str, window: str | None = None) -> Dict[str, Any]:
             ts_sorted = sorted(price_map.keys())
             return {
                 "funding": [],
+                "funding_binance": [],
+                "funding_bybit": [],
+                "funding_okx": [],
                 "basis": [],
                 "oi": [],
                 "price": [price_map[t] for t in ts_sorted],
                 "timestamps": ts_sorted,
             }
-        return {"funding": [], "basis": [], "oi": [], "price": [], "timestamps": []}
+        return {
+            "funding": [],
+            "funding_binance": [],
+            "funding_bybit": [],
+            "funding_okx": [],
+            "basis": [],
+            "oi": [],
+            "price": [],
+            "timestamps": [],
+        }
 
 
 @app.post("/backfill/derivs")
@@ -609,14 +653,26 @@ async def backfill_derivs(hours: int = 24) -> Dict[str, Any]:
             series = await derivs_backfill(s, hours)
             n = 0
             prices = series.get("price", [None] * len(series.get("timestamps", [])))
-            for t, f, b, o, p in zip(
+            for t, f, b, o, p, fb, fby, fokx in zip(
                 series.get("timestamps", []),
                 series.get("funding", []),
                 series.get("basis", []),
                 series.get("oi", []),
                 prices,
+                series.get("funding_binance", []),
+                series.get("funding_bybit", []),
+                series.get("funding_okx", []),
             ):
-                payload = {"funding": f, "basis": b, "oi": o, "time": t, "price": p}
+                payload = {
+                    "funding": f,
+                    "basis": b,
+                    "oi": o,
+                    "time": t,
+                    "price": p,
+                    "funding_binance": fb,
+                    "funding_bybit": fby,
+                    "funding_okx": fokx,
+                }
                 try:
                     db_save_derivs(s, payload)
                 except Exception:

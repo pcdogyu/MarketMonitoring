@@ -138,14 +138,18 @@ async def fetch_all(symbol: str, ts: str) -> Dict[str, float]:
     returns a summed ``oi`` once all three venues have reported.
     """
 
-    results = await asyncio.gather(_binance(symbol), _bybit(symbol), _okx(symbol))
-    names = ["binance", "bybit", "okx"]
+    binance, bybit, okx = await asyncio.gather(
+        _binance(symbol), _bybit(symbol), _okx(symbol)
+    )
+    results = {"binance": binance, "bybit": bybit, "okx": okx}
 
     fundings, bases = [], []
-    for name, res in zip(names, results):
+    funding_map: Dict[str, float] = {}
+    for name, res in results.items():
         if not res:
             continue
         f, b, oi = res
+        funding_map[f"funding_{name}"] = f
         fundings.append(f)
         bases.append(b)
         if oi > 0:
@@ -158,6 +162,7 @@ async def fetch_all(symbol: str, ts: str) -> Dict[str, float]:
         "funding": sum(fundings) / len(fundings) if fundings else 0.0,
         "basis": sum(bases) / len(bases) if bases else 0.0,
         "oi": oi_total,
+        **funding_map,
     }
 
 
@@ -181,17 +186,30 @@ def append_history(
         hist = {"funding": [], "basis": [], "oi": [], "price": [], "timestamps": []}
 
     # ensure all arrays exist for new keys
-    hist.setdefault("price", [])
+    for k in ("price", "funding_binance", "funding_bybit", "funding_okx"):
+        hist.setdefault(k, [])
 
     hist["funding"].append(data["funding"])
     hist["basis"].append(data["basis"])
     hist["oi"].append(data["oi"])
+    hist["funding_binance"].append(data.get("funding_binance"))
+    hist["funding_bybit"].append(data.get("funding_bybit"))
+    hist["funding_okx"].append(data.get("funding_okx"))
     # ``price`` may be absent; append None to keep array lengths aligned
     hist["price"].append(data.get("price"))
     hist["timestamps"].append(data.get("time") or time.strftime("%H:%M", time.gmtime()))
 
     if max_points:
-        for k in ("funding", "basis", "oi", "price", "timestamps"):
+        for k in (
+            "funding",
+            "basis",
+            "oi",
+            "price",
+            "timestamps",
+            "funding_binance",
+            "funding_bybit",
+            "funding_okx",
+        ):
             hist[k] = hist[k][-max_points:]
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -317,6 +335,9 @@ async def backfill(symbol: str, hours: int = 24) -> Dict[str, Any]:
 
     return {
         "funding": f_series,
+        "funding_binance": f_series,
+        "funding_bybit": [None] * len(f_series),
+        "funding_okx": [None] * len(f_series),
         "basis": basis,
         "oi": oi_series,
         "price": price_series,

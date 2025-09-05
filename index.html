@@ -240,7 +240,7 @@ async function load(){
     document.getElementById('derivs-sym').textContent=currentSym;
     let wrap=document.getElementById('derivs-wrap');
     if(!wrap.hasChildNodes()){
-      ['price','funding','basis','oi'].forEach(kind=>{let box=document.createElement('div');box.id='derivs-'+kind;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});
+      ['price','funding-binance','funding-bybit','funding-okx','basis','oi'].forEach(kind=>{let box=document.createElement('div');box.id='derivs-'+kind;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});
     }
     let d=await fetch(`/chart/derivs?symbol=${currentSym}&window=${currentWindow}`).then(r=>r.json());
     let x=toUTC8(d.timestamps);
@@ -251,11 +251,13 @@ async function load(){
         return (v == null || num === 0 || Number.isNaN(num)) ? null : fn(num);
       });
     let p=toSeries(d.price);
-    let f=toSeries(d.funding,v=>v*100);
+    let fb=toSeries(d.funding_binance,v=>v*100);
+    let fby=toSeries(d.funding_bybit,v=>v*100);
+    let fok=toSeries(d.funding_okx,v=>v*100);
     let b=toSeries(d.basis);
     let o=toSeries(d.oi);
     let dec=symDecimals[currentSym]??2;
-    let mk=(id,name,data,axisFmt,color,autoScale=false)=>{
+    let mk=(id,name,data,axisFmt,color,autoScale=false,desc='')=>{
       let c=echarts.init(document.getElementById(id));
       let yAxis={type:'value',name:name,axisLabel:{formatter:(val)=>axisFmt(val)}};
       if(autoScale){
@@ -266,16 +268,22 @@ async function load(){
           Object.assign(yAxis,{scale:true,min:minVal,max:maxVal});
         }
       }
-      c.setOption({
+      const opt={
         tooltip:{trigger:'axis',formatter:(ps)=>{let p=ps[0];return p.axisValueLabel+'<br/>'+name+': '+axisFmt(p.data);}},
         xAxis:{type:'category',data:x},
         yAxis,
         dataZoom:[{type:'inside'}],
         series:[{name,showSymbol:false,type:'line',data,connectNulls:true,lineStyle:{color},itemStyle:{color}}]
-      });
+      };
+      if(desc){
+        opt.title={text:desc,left:'center',textStyle:{fontSize:12}};
+      }
+      c.setOption(opt);
     };
     mk('derivs-price','Price (USD)',p,v=>'$'+Number(v).toFixed(dec),'#3BA272',true);
-    mk('derivs-funding','Funding (%)',f,v=>Number(v).toFixed(4)+'%','#5470C6',true);
+    mk('derivs-funding-binance','Funding (%)',fb,v=>Number(v).toFixed(4)+'%','#5470C6',true,'Binance 资费');
+    mk('derivs-funding-bybit','Funding (%)',fby,v=>Number(v).toFixed(4)+'%','#91CC75',true,'Bybit 资费');
+    mk('derivs-funding-okx','Funding (%)',fok,v=>Number(v).toFixed(4)+'%','#EE6666',true,'OKX 资费');
     mk('derivs-basis','Basis (USD)',b,v=>'$'+Number(v).toFixed(2),'#EE6666');
     mk('derivs-oi','Open Interest',o,v=>Math.round(v).toLocaleString(),'#91CC75',true);
   }else if(currentTab==='orders'){
