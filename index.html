@@ -37,7 +37,7 @@
     <div id='window-buttons' style='display:flex;gap:4px'></div>
   </div>
   <h3 id='derivs-sym' style='margin:0'></h3>
-  <div id='derivs-wrap' style='display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start'></div>
+  <div id='derivs-wrap' style='display:grid;grid-template-columns:1fr;gap:10px;align-items:start;width:100%'></div>
   <div id='backfill-note' style='color:#888;font-size:12px;margin-top:4px'></div>
 </div>
 <div id='tab-orders' style='display:none'>
@@ -244,7 +244,7 @@ async function load(){
     document.getElementById('derivs-sym').textContent=displaySym(currentSym);
     let wrap=document.getElementById('derivs-wrap');
     if(!wrap.hasChildNodes()){
-      ['price','funding-binance','funding-bybit','funding-okx','basis','oi'].forEach(kind=>{let box=document.createElement('div');box.id='derivs-'+kind;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});
+      ['price','funding-binance','funding-okx','basis','oi-binance','oi-bybit','oi-okx'].forEach(kind=>{let box=document.createElement('div');box.id='derivs-'+kind;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});
     }
     let d=await fetch(`/chart/derivs?symbol=${currentSym}&window=${currentWindow}`).then(r=>r.json());
     let x=toUTC8(d.timestamps);
@@ -256,10 +256,11 @@ async function load(){
       });
     let p=toSeries(d.price);
     let fb=toSeries(d.funding_binance,v=>v*100);
-    let fby=toSeries(d.funding_bybit,v=>v*100);
     let fok=toSeries(d.funding_okx,v=>v*100);
     let b=toSeries(d.basis);
-    let o=toSeries(d.oi);
+    let ob=toSeries(d.oi_binance);
+    let oby=toSeries(d.oi_bybit);
+    let ook=toSeries(d.oi_okx);
     let dec=symDecimals[currentSym]??2;
     let mk=(id,name,data,axisFmt,color,autoScale=false,desc='')=>{
       let c=echarts.init(document.getElementById(id));
@@ -286,10 +287,11 @@ async function load(){
     };
     mk('derivs-price','Price (USD)',p,v=>'$'+Number(v).toFixed(dec),'#3BA272',true);
     mk('derivs-funding-binance','Funding (%)',fb,v=>Number(v).toFixed(4)+'%','#5470C6',true,'Binance 资费');
-    mk('derivs-funding-bybit','Funding (%)',fby,v=>Number(v).toFixed(4)+'%','#91CC75',true,'Bybit 资费');
     mk('derivs-funding-okx','Funding (%)',fok,v=>Number(v).toFixed(4)+'%','#EE6666',true,'OKX 资费');
     mk('derivs-basis','Basis (USD)',b,v=>'$'+Number(v).toFixed(2),'#EE6666');
-    mk('derivs-oi','Open Interest',o,v=>Math.round(v).toLocaleString(),'#91CC75',true);
+    mk('derivs-oi-binance','Open Interest',ob,v=>Math.round(v).toLocaleString(),'#5470C6',true,'Binance 持仓量');
+    mk('derivs-oi-bybit','Open Interest',oby,v=>Math.round(v).toLocaleString(),'#91CC75',true,'Bybit 持仓量');
+    mk('derivs-oi-okx','Open Interest',ook,v=>Math.round(v).toLocaleString(),'#EE6666',true,'OKX 持仓量');
   }else if(currentTab==='orders'){
     initDepthButtons();
     let wrap=document.getElementById('orders-wrap');
