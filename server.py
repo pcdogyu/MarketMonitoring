@@ -30,6 +30,7 @@ except ImportError:  # pragma: no cover - dependency may be missing
 from derivatives import append_history as append_deriv_history
 from derivatives import fetch_all as fetch_derivs
 from derivatives import backfill as derivs_backfill
+from liquidations import fetch_map as fetch_liq_map
 from db import (
     init_db,
     save_derivs as db_save_derivs,
@@ -896,6 +897,18 @@ async def chart_trades(symbol: str) -> Dict[str, Any]:
     price = await fetch_price(sym)
 
     return {"symbol": sym, "prices": prices, "volumes": volumes, "price": price}
+
+
+@app.get("/chart/liquidations")
+async def chart_liquidations(symbol: str) -> Dict[str, Any]:
+    """Return aggregated liquidation map for ``symbol`` across exchanges."""
+
+    sym = symbol.upper()
+    try:
+        data = await fetch_liq_map(sym)
+    except Exception:
+        data = {"prices": [], "volumes": [], "bin_size": 100.0, "ts": int(time.time())}
+    return {"symbol": sym, **data}
 
 
 @app.post("/labels/import")
