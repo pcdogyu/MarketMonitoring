@@ -59,6 +59,7 @@
 </div>
 <script>
 const derivSyms=__SYMS__;
+function displaySym(s){return s.replace(/USDT$/,'');}
 const symDecimals={
   'XRPUSDT':5,
   'XLMUSDT':4,
@@ -90,13 +91,13 @@ function updateOrdersTitle(){
   if(!h) return;
   const dec=symDecimals[currentSym]??2;
   const p=Number(latestPrice);
-  h.textContent=`${currentSym} Bids/Asks${p? ' '+p.toFixed(dec):''}`;
+  h.textContent=`${displaySym(currentSym)} Bids/Asks${p? ' '+p.toFixed(dec):''}`;
 }
 function initSymMenu(){
   if(symMenu.hasChildNodes()) return;
   derivSyms.forEach((s,i)=>{
     let b=document.createElement('button');
-    b.textContent=s;
+    b.textContent=displaySym(s);
     b.className='menu';
     if(i===0) b.classList.add('active');
     b.onclick=()=>showSym(s,b);
@@ -240,7 +241,7 @@ async function load(){
     let pred2=await fetch('/predict/ETHUSDT').then(r=>r.json());
     document.getElementById('predict-json').innerHTML='<h3>预测信号</h3><p style="color:#555;font-size:14px">数据来源:data/holdings_history.json, 信号计算为 ΔBTC/ETH - 0.8·ΔUSDT - 0.4·ΔUSDC</p><pre>'+JSON.stringify([pred1,pred2],null,2)+'</pre>';
   }else if(currentTab==='derivs'){
-    document.getElementById('derivs-sym').textContent=currentSym;
+    document.getElementById('derivs-sym').textContent=displaySym(currentSym);
     let wrap=document.getElementById('derivs-wrap');
     if(!wrap.hasChildNodes()){
       ['price','funding-binance','funding-bybit','funding-okx','basis','oi'].forEach(kind=>{let box=document.createElement('div');box.id='derivs-'+kind;box.style.cssText='width:100%;height:260px;border:1px solid #ccc';wrap.appendChild(box);});
@@ -293,9 +294,9 @@ async function load(){
     initDepthButtons();
     let wrap=document.getElementById('orders-wrap');
     if(!wrap.hasChildNodes()){
-      wrap.innerHTML=`<h3>${currentSym} Bids/Asks</h3><div id='orders-chart' style='width:100%;height:600px;border:1px solid #ccc'></div>`;
+      wrap.innerHTML=`<h3>${displaySym(currentSym)} Bids/Asks</h3><div id='orders-chart' style='width:100%;height:600px;border:1px solid #ccc'></div>`;
     }else{
-      wrap.querySelector('h3').textContent=`${currentSym} Bids/Asks`;
+      wrap.querySelector('h3').textContent=`${displaySym(currentSym)} Bids/Asks`;
     }
     let ob=await fetch(`/chart/orders?symbol=${currentSym}&limit=${currentDepth}`).then(r=>r.json());
     if(!ordersChart){
@@ -370,10 +371,10 @@ async function load(){
   }else if(currentTab==='trades'){
     let wrap=document.getElementById('trades-wrap');
     if(!wrap.hasChildNodes()){
-      wrap.innerHTML=`<h3>${currentSym}</h3><div id='va-buttons' style='margin:10px 0;display:flex;gap:4px'></div><div id='trades-chart' style='width:100%;height:80vh;border:1px solid #ccc'></div>`;
+      wrap.innerHTML=`<h3>${displaySym(currentSym)}</h3><div id='va-buttons' style='margin:10px 0;display:flex;gap:4px'></div><div id='trades-chart' style='width:100%;height:80vh;border:1px solid #ccc'></div>`;
       initVAButtons();
     }else{
-      wrap.querySelector('h3').textContent=currentSym;
+      wrap.querySelector('h3').textContent=displaySym(currentSym);
       initVAButtons();
     }
     let td=await fetch(`/chart/trades?symbol=${currentSym}`).then(r=>r.json());
@@ -455,9 +456,9 @@ async function load(){
   }else if(currentTab==='cancels'){
     let wrap=document.getElementById('cancels-wrap');
     if(!wrap.hasChildNodes()){
-      wrap.innerHTML=`<h3>${currentSym}</h3><div id='cancels-line' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>`;
+      wrap.innerHTML=`<h3>${displaySym(currentSym)}</h3><div id='cancels-line' style='width:800px;height:320px;border:1px solid #ccc;margin-top:10px'></div>`;
     }else{
-      wrap.querySelector('h3').textContent=currentSym;
+      wrap.querySelector('h3').textContent=displaySym(currentSym);
     }
     let d=await fetch(`/chart/cancels?symbol=${currentSym}`).then(r=>r.json());
     let chart=echarts.init(document.getElementById('cancels-line'));
