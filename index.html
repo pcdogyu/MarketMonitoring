@@ -110,8 +110,8 @@ function renderOrdersList(ob){
   const buyLevels=[];
   const sellLevels=[];
   for(let i=0;i<prices.length;i++){
-    if(buys[i]>=currentFilter) buyLevels.push({p:prices[i],q:buys[i]});
-    if(sells[i]>=currentFilter) sellLevels.push({p:prices[i],q:sells[i]});
+    if(buys[i]>0 && buys[i]>=currentFilter) buyLevels.push({p:prices[i],q:buys[i]});
+    if(sells[i]>0 && sells[i]>=currentFilter) sellLevels.push({p:prices[i],q:sells[i]});
   }
   buyLevels.sort((a,b)=>b.p-a.p);
   sellLevels.sort((a,b)=>a.p-b.p);
@@ -370,10 +370,10 @@ async function load(){
     const sells=ob.sell.map(Number);
     let bestBid=null,bestAsk=null;
     for(let i=prices.length-1;i>=0;i--){
-      if(buys[i]>=currentFilter){bestBid=prices[i];break;}
+      if(buys[i]>0 && buys[i]>=currentFilter){bestBid=prices[i];break;}
     }
     for(let i=0;i<prices.length;i++){
-      if(sells[i]>=currentFilter){bestAsk=prices[i];break;}
+      if(sells[i]>0 && sells[i]>=currentFilter){bestAsk=prices[i];break;}
     }
     let mid=ob.price;
     if(bestBid!=null&&bestAsk!=null) mid=(bestBid+bestAsk)/2;
@@ -390,8 +390,8 @@ async function load(){
       fPrices.push(p);
       const bq=buys[i];
       const sq=sells[i];
-      fBuys.push(bq>=threshold?bq:0);
-      fSells.push(sq>=threshold?sq:0);
+      fBuys.push(bq>=threshold && bq>0 ? bq : 0);
+      fSells.push(sq>=threshold && sq>0 ? sq : 0);
     }
     const linePrice=refPrice;
     let priceStr=Number(linePrice).toFixed(dec);
