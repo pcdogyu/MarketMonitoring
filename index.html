@@ -103,6 +103,9 @@ function initSymMenu(){
 }
 function initDepthButtons(){
   if(depthButtons.hasChildNodes()) return;
+  let label=document.createElement('span');
+  label.textContent='市场深度';
+  depthButtons.appendChild(label);
   depthLevels.forEach(d=>{
     let b=document.createElement('button');
     b.textContent=d;
@@ -303,24 +306,37 @@ async function load(){
     else if(bestBid!=null) mid=bestBid;
     else if(bestAsk!=null) mid=bestAsk;
     updateOrdersTitle();
+    const refPrice=latestPrice||mid;
     const fPrices=[],fBuys=[],fSells=[];
     for(let i=0;i<prices.length;i++){
       const p=prices[i];
-      if(latestPrice && Math.abs(p-latestPrice)/latestPrice>0.2) continue;
+      if(Math.abs(p-refPrice)/refPrice>0.1) continue;
       fPrices.push(p);
       fBuys.push(buys[i]);
       fSells.push(sells[i]);
     }
-    const linePrice=latestPrice||mid;
+    const linePrice=refPrice;
     let priceStr=Number(linePrice).toFixed(dec);
+    const axisVals=fPrices.map(p=>p.toFixed(dec));
+    const lower=linePrice*0.99;
+    const upper=linePrice*1.01;
+    let startIdx=0,endIdx=axisVals.length-1;
+    for(let i=0;i<fPrices.length;i++){
+      if(fPrices[i]>=lower){startIdx=i;break;}
+    }
+    for(let i=fPrices.length-1;i>=0;i--){
+      if(fPrices[i]<=upper){endIdx=i;break;}
+    }
+    const startVal=axisVals[startIdx] ?? axisVals[0];
+    const endVal=axisVals[endIdx] ?? axisVals[axisVals.length-1];
 
     chart.setOption({
       tooltip:{},
       legend:{data:['buy','sell']},
       grid:{left:0,right:0,containLabel:true},
-      xAxis:{type:'category',data:fPrices.map(p=>p.toFixed(dec)),boundaryGap:false},
+      xAxis:{type:'category',data:axisVals,boundaryGap:false},
       yAxis:{type:'value'},
-      dataZoom:[{type:'inside'}],
+      dataZoom:[{type:'inside',startValue:startVal,endValue:endVal}],
       series:[
         {name:'buy',data:fBuys,type:'bar',markLine:{symbol:'none',lineStyle:{type:'dashed'},data:[{xAxis:priceStr}]}},
         {name:'sell',data:fSells,type:'bar'}
